@@ -8,7 +8,7 @@ import { Camera, MapPin, RefreshCw, Download, X, Info, FolderPlus, Folder, Image
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   auth, db, googleProvider, signInWithPopup, signOut, onAuthStateChanged, 
-  collection, addDoc, query, where, onSnapshot, serverTimestamp, deleteDoc, doc,
+  collection, addDoc, query, where, onSnapshot, serverTimestamp, deleteDoc, doc, setDoc, getDocs,
   User, OperationType, handleFirestoreError 
 } from './firebase';
 
@@ -55,6 +55,15 @@ export default function App() {
   const [selectedPhoto, setSelectedPhoto] = useState<PhotoItem | null>(null);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
+
+  // Rename Folder State
+  const [isRenamingFolder, setIsRenamingFolder] = useState(false);
+  const [renamingFolder, setRenamingFolder] = useState<FolderItem | null>(null);
+  const [renameFolderName, setRenameFolderName] = useState('');
+
+  // Delete Folder State
+  const [isDeletingFolder, setIsDeletingFolder] = useState(false);
+  const [folderToDelete, setFolderToDelete] = useState<string | null>(null);
 
   // Upload State
   const [uploadedImageSrc, setUploadedImageSrc] = useState<string | null>(null);
@@ -172,38 +181,12 @@ export default function App() {
     return () => unsubscribe();
   }, [user, selectedFolder, view]);
 
-  // Auto-create default folder if none exists
+  // Prompt user to create their first folder if none exists
   useEffect(() => {
     if (isAuthReady && user && folders.length === 0 && !isCreatingFolder) {
-      const createDefaultFolder = async () => {
-        try {
-          const folderData = {
-            name: "الصور الملتقطة",
-            ownerId: user.uid,
-          };
-          if (user.uid === 'guest_user') {
-            const defaultFolder = {
-              id: 'default_guest_folder',
-              ...folderData,
-              createdAt: new Date().toISOString()
-            };
-            const defaultFoldersList = [defaultFolder];
-            setFolders(defaultFoldersList);
-            setSelectedFolder(defaultFolder);
-            localStorage.setItem('guest_folders', JSON.stringify(defaultFoldersList));
-            return;
-          }
-          await addDoc(collection(db, 'folders'), {
-            ...folderData,
-            createdAt: serverTimestamp()
-          });
-        } catch (err) {
-          console.error("Error creating default folder:", err);
-        }
-      };
-      createDefaultFolder();
+      setIsCreatingFolder(true);
     }
-  }, [isAuthReady, user, folders.length, isCreatingFolder]);
+  }, [isAuthReady, user, folders.length]);
 
   // Camera Logic
   const startCamera = async () => {
@@ -742,7 +725,8 @@ export default function App() {
     if (!user || !img || !location) return;
     if (!selectedFolder) {
       setView('folders');
-      setError("يرجى اختيار مجلد أولاً");
+      setIsCreatingFolder(true);
+      setError("يرجى إنشاء مجلد أولاً لحفظ الصور");
       return;
     }
 
@@ -1020,10 +1004,64 @@ export default function App() {
     }
   };
 
-  const deleteFolder = async (id: string) => {
-    if (!window.confirm("هل أنت متأكد من حذف المجلد وجميع الصور بداخله؟")) return;
+  const handleOpenRenameFolder = (folder: FolderItem) => {
+    setRenamingFolder(folder);
+    setRenameFolderName(folder.name);
+    setIsRenamingFolder(true);
+  };
+
+  const renameFolder = async () => {
+    if (!user || !renamingFolder || !renameFolderName.trim()) return;
     try {
-      if (user?.uid === 'guest_user') {
+      const updatedName = renameFolderName.trim();
+
+      if (user.uid === 'guest_user') {
+        const storedFolders = localStorage.getItem('guest_folders');
+        const allFolders = storedFolders ? JSON.parse(storedFolders) : [];
+        const updatedFolders = allFolders.map((f: FolderItem) => 
+          f.id === renamingFolder.id ? { ...f, name: updatedName } : f
+        );
+        localStorage.setItem('guest_folders', JSON.stringify(updatedFolders));
+        setFolders(updatedFolders);
+        
+        if (selectedFolder?.id === renamingFolder.id) {
+          setSelectedFolder({ ...selectedFolder, name: updatedName });
+        }
+        
+        setIsRenamingFolder(false);
+        setRenamingFolder(null);
+        setRenameFolderName('');
+        setSuccessMessage("تم تعديل اسم المجلد بنجاح ✨");
+        setTimeout(() => setSuccessMessage(null), 3000);
+        return;
+      }
+
+      await setDoc(doc(db, 'folders', renamingFolder.id), { name: updatedName }, { merge: true });
+
+      if (selectedFolder?.id === renamingFolder.id) {
+        setSelectedFolder({ ...selectedFolder, name: updatedName });
+      }
+
+      setIsRenamingFolder(false);
+      setRenamingFolder(null);
+      setRenameFolderName('');
+      setSuccessMessage("تم تعديل اسم المجلد بنجاح ✨");
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'folders');
+    }
+  };
+
+  const deleteFolder = (id: string) => {
+    setFolderToDelete(id);
+    setIsDeletingFolder(true);
+  };
+
+  const confirmDeleteFolder = async () => {
+    if (!user || !folderToDelete) return;
+    const id = folderToDelete;
+    try {
+      if (user.uid === 'guest_user') {
         const storedFolders = localStorage.getItem('guest_folders');
         const allFolders = storedFolders ? JSON.parse(storedFolders) : [];
         const updatedFolders = allFolders.filter((f: FolderItem) => f.id !== id);
@@ -1039,11 +1077,36 @@ export default function App() {
         if (selectedFolder?.id === id) {
           setSelectedFolder(updatedFolders[0] || null);
         }
+        setIsDeletingFolder(false);
+        setFolderToDelete(null);
+        setSuccessMessage("تم حذف المجلد وجميع الصور بداخله بنجاح 🗑️");
+        setTimeout(() => setSuccessMessage(null), 3000);
         return;
       }
 
+      // Delete folder itself
       await deleteDoc(doc(db, 'folders', id));
-      // Note: Ideally delete sub-photos too, but for simplicity we just delete the folder
+
+      // Query and delete photos inside this folder in Firebase
+      const q = query(
+        collection(db, 'photos'), 
+        where('ownerId', '==', user.uid),
+        where('folderId', '==', id)
+      );
+      const snapshot = await getDocs(q);
+      const deletePromises = snapshot.docs.map(docRef => deleteDoc(docRef.ref));
+      await Promise.all(deletePromises);
+
+      // Select another folder if the deleted folder was selected
+      if (selectedFolder?.id === id) {
+        const remainingFolders = folders.filter(f => f.id !== id);
+        setSelectedFolder(remainingFolders[0] || null);
+      }
+
+      setIsDeletingFolder(false);
+      setFolderToDelete(null);
+      setSuccessMessage("تم حذف المجلد وجميع الصور بداخله بنجاح 🗑️");
+      setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
       handleFirestoreError(err, OperationType.DELETE, 'folders');
     }
@@ -1293,11 +1356,28 @@ export default function App() {
       <div className="fixed inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none" />
       {/* Header */}
       <header className={`${view === 'camera' ? 'absolute' : 'relative bg-zinc-950 border-b border-white/5'} top-0 left-0 right-0 p-4 flex justify-between items-center bg-gradient-to-b from-black/80 to-transparent z-50`}>
-        <div className="flex items-center gap-2">
-          <div className="bg-blue-600 p-1.5 rounded-lg shadow-lg shadow-blue-900/20">
-            <MapPin className="w-5 h-5" />
+        <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <div className="bg-blue-600 p-1.5 rounded-lg shadow-lg shadow-blue-900/20">
+              <MapPin className="w-5 h-5" />
+            </div>
+            <h1 className="text-lg font-bold tracking-tight drop-shadow-md">ReefSup V1.0</h1>
           </div>
-          <h1 className="text-lg font-bold tracking-tight drop-shadow-md">ReefSup V1.0</h1>
+
+          {/* Go to Folders Button */}
+          <button
+            onClick={() => { setView('folders'); setUploadedImageSrc(null); }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all duration-300 text-xs font-bold cursor-pointer shadow-lg ${
+              view === 'folders' 
+                ? 'bg-blue-600 text-white border-blue-500 shadow-blue-600/20' 
+                : 'bg-white/10 hover:bg-white/20 text-white border-white/10 hover:border-white/20'
+            }`}
+            title="الذهاب إلى صفحة المجلدات"
+          >
+            <Folder className="w-4 h-4 shrink-0 text-blue-400" />
+            <span className="hidden sm:inline">صفحة المجلدات</span>
+            <span className="sm:hidden">المجلدات</span>
+          </button>
         </div>
         <div className="flex items-center gap-2">
           {/* Camera Button */}
@@ -1563,9 +1643,22 @@ export default function App() {
                       <div className={`p-3 rounded-2xl ${selectedFolder?.id === f.id ? 'bg-blue-500/20 text-blue-400' : 'bg-zinc-800 text-zinc-400'}`}>
                         <Folder className="w-6 h-6" />
                       </div>
-                      <button onClick={() => deleteFolder(f.id)} className="p-2 text-zinc-600 hover:text-red-400 bg-black/20 rounded-full transition-colors">
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      <div className="flex gap-2">
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); handleOpenRenameFolder(f); }} 
+                          className="p-2 text-zinc-600 hover:text-blue-400 bg-black/20 rounded-full transition-colors"
+                          title="تعديل اسم المجلد"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                        <button 
+                          onClick={(e) => { e.stopPropagation(); deleteFolder(f.id); }} 
+                          className="p-2 text-zinc-600 hover:text-red-400 bg-black/20 rounded-full transition-colors"
+                          title="حذف المجلد"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      </div>
                     </div>
                     <h3 className="font-bold text-lg mb-1 truncate">{f.name}</h3>
                     <p className="text-xs text-zinc-500 mb-4">
@@ -2252,6 +2345,212 @@ export default function App() {
                     className="flex-1 bg-blue-600 hover:bg-blue-500 rounded-xl py-3 font-bold text-sm text-white shadow-lg shadow-blue-600/20 active:scale-[0.98] transition-all cursor-pointer"
                   >
                     تطبيق وحفظ التعديلات
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Create Folder Modal */}
+        <AnimatePresence>
+          {isCreatingFolder && (
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[60] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 text-right"
+              dir="rtl"
+            >
+              <motion.div
+                initial={{ scale: 0.95, y: 15 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.95, y: 15 }}
+                className="bg-zinc-900 w-full max-w-md rounded-3xl p-6 border border-white/10 shadow-2xl flex flex-col gap-4 text-white"
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="text-xl font-bold flex items-center gap-2">
+                      <FolderPlus className="w-5 h-5 text-blue-400" />
+                      إنشاء مجلد جديد
+                    </h3>
+                    <p className="text-xs text-zinc-500 mt-1">يرجى إدخال اسم المجلد الجديد لتنظيم صورك بداخله.</p>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setIsCreatingFolder(false);
+                      setNewFolderName('');
+                    }}
+                    className="p-1.5 bg-zinc-800 hover:bg-zinc-750 rounded-full transition-colors text-zinc-400 hover:text-white cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="flex flex-col gap-2 mt-2">
+                  <label className="text-xs font-bold text-zinc-400">اسم المجلد</label>
+                  <input 
+                    type="text"
+                    placeholder="مثال: صور العمل، رحلة برية، مشروع الدمام..."
+                    value={newFolderName}
+                    onChange={e => setNewFolderName(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && createFolder()}
+                    className="w-full bg-zinc-800 border-none rounded-2xl p-4 text-sm placeholder-zinc-600 text-white focus:ring-2 focus:ring-blue-500"
+                    autoFocus
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button 
+                    onClick={() => {
+                      setIsCreatingFolder(false);
+                      setNewFolderName('');
+                    }} 
+                    className="flex-1 py-3.5 bg-zinc-800 hover:bg-zinc-750 rounded-xl text-zinc-400 font-bold text-sm transition-colors cursor-pointer border border-white/5"
+                  >
+                    إلغاء
+                  </button>
+                  <button 
+                    onClick={createFolder} 
+                    disabled={!newFolderName.trim()}
+                    className="flex-1 bg-blue-600 hover:bg-blue-500 rounded-xl py-3.5 font-bold text-sm text-white shadow-lg shadow-blue-600/20 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    تأكيد الإنشاء
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Rename Folder Modal */}
+        <AnimatePresence>
+          {isRenamingFolder && (
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[60] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 text-right"
+              dir="rtl"
+            >
+              <motion.div
+                initial={{ scale: 0.95, y: 15 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.95, y: 15 }}
+                className="bg-zinc-900 w-full max-w-md rounded-3xl p-6 border border-white/10 shadow-2xl flex flex-col gap-4 text-white"
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="text-xl font-bold flex items-center gap-2">
+                      <Folder className="w-5 h-5 text-blue-400" />
+                      تعديل اسم المجلد
+                    </h3>
+                    <p className="text-xs text-zinc-500 mt-1">قم بتعديل الاسم الحالي للمجلد.</p>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setIsRenamingFolder(false);
+                      setRenamingFolder(null);
+                      setRenameFolderName('');
+                    }}
+                    className="p-1.5 bg-zinc-800 hover:bg-zinc-750 rounded-full transition-colors text-zinc-400 hover:text-white cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="flex flex-col gap-2 mt-2">
+                  <label className="text-xs font-bold text-zinc-400">الاسم الجديد</label>
+                  <input 
+                    type="text"
+                    placeholder="أدخل الاسم الجديد للمجلد..."
+                    value={renameFolderName}
+                    onChange={e => setRenameFolderName(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && renameFolder()}
+                    className="w-full bg-zinc-800 border-none rounded-2xl p-4 text-sm placeholder-zinc-600 text-white focus:ring-2 focus:ring-blue-500"
+                    autoFocus
+                  />
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button 
+                    onClick={() => {
+                      setIsRenamingFolder(false);
+                      setRenamingFolder(null);
+                      setRenameFolderName('');
+                    }} 
+                    className="flex-1 py-3.5 bg-zinc-800 hover:bg-zinc-750 rounded-xl text-zinc-400 font-bold text-sm transition-colors cursor-pointer border border-white/5"
+                  >
+                    إلغاء
+                  </button>
+                  <button 
+                    onClick={renameFolder} 
+                    disabled={!renameFolderName.trim() || renameFolderName.trim() === renamingFolder?.name}
+                    className="flex-1 bg-blue-600 hover:bg-blue-500 rounded-xl py-3.5 font-bold text-sm text-white shadow-lg shadow-blue-600/20 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    تطبيق التعديل
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Delete Folder Modal */}
+        <AnimatePresence>
+          {isDeletingFolder && (
+            <motion.div 
+              initial={{ opacity: 0 }} 
+              animate={{ opacity: 1 }} 
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[60] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 text-right"
+              dir="rtl"
+            >
+              <motion.div
+                initial={{ scale: 0.95, y: 15 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.95, y: 15 }}
+                className="bg-zinc-900 w-full max-w-md rounded-3xl p-6 border border-white/10 shadow-2xl flex flex-col gap-4 text-white"
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="text-xl font-bold flex items-center gap-2">
+                      <Trash2 className="w-5 h-5 text-red-500" />
+                      تأكيد حذف المجلد
+                    </h3>
+                    <p className="text-xs text-zinc-500 mt-1">هل أنت متأكد من رغبتك في حذف هذا المجلد وجميع الصور الموجودة بداخله؟</p>
+                  </div>
+                  <button 
+                    onClick={() => {
+                      setIsDeletingFolder(false);
+                      setFolderToDelete(null);
+                    }}
+                    className="p-1.5 bg-zinc-800 hover:bg-zinc-750 rounded-full transition-colors text-zinc-400 hover:text-white cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-start gap-3 mt-2 text-red-400">
+                  <Info className="w-5 h-5 shrink-0 mt-0.5" />
+                  <p className="text-xs leading-relaxed">تنبيه: هذا الإجراء لا يمكن التراجع عنه. سيتم حذف جميع الصور التي تم التقاطها وحفظها في هذا المجلد نهائياً.</p>
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button 
+                    onClick={() => {
+                      setIsDeletingFolder(false);
+                      setFolderToDelete(null);
+                    }} 
+                    className="flex-1 py-3.5 bg-zinc-800 hover:bg-zinc-750 rounded-xl text-zinc-400 font-bold text-sm transition-colors cursor-pointer border border-white/5"
+                  >
+                    إلغاء
+                  </button>
+                  <button 
+                    onClick={confirmDeleteFolder} 
+                    className="flex-1 bg-red-600 hover:bg-red-500 rounded-xl py-3.5 font-bold text-sm text-white shadow-lg shadow-red-600/20 active:scale-[0.98] transition-all cursor-pointer"
+                  >
+                    نعم، حذف المجلد
                   </button>
                 </div>
               </motion.div>
