@@ -1074,12 +1074,12 @@ export default function App() {
       try {
         const response = await fetch(src);
         const blob = await response.blob();
-        const file = new File([blob], `Reef_Photo_${new Date().getTime()}.jpg`, { type: 'image/jpeg' });
+        const file = new File([blob], `ReefSup_Photo_${new Date().getTime()}.jpg`, { type: 'image/jpeg' });
         
         if (navigator.canShare({ files: [file] })) {
           await navigator.share({
             files: [file],
-            title: 'Reef Photo',
+            title: 'ReefSup Photo',
           });
           return;
         }
@@ -1091,7 +1091,7 @@ export default function App() {
     // Fallback to standard download
     const link = document.createElement('a');
     link.href = src;
-    link.download = `Reef_Photo_${new Date().getTime()}.jpg`;
+    link.download = `ReefSup_Photo_${new Date().getTime()}.jpg`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -1107,7 +1107,7 @@ export default function App() {
           selectedPhotos.map(async (p, i) => {
             const response = await fetch(p.imageUrl);
             const blob = await response.blob();
-            return new File([blob], `Reef_Photo_${i}_${new Date().getTime()}.jpg`, { type: 'image/jpeg' });
+            return new File([blob], `ReefSup_Photo_${i}_${new Date().getTime()}.jpg`, { type: 'image/jpeg' });
           })
         );
 
@@ -1115,7 +1115,7 @@ export default function App() {
           await navigator.share({
             files,
             title: `صور من ${selectedFolder?.name}`,
-            text: `تمت مشاركة ${selectedPhotos.length} صورة من تطبيق Reef App`,
+            text: `تمت مشاركة ${selectedPhotos.length} صورة من تطبيق ReefSup V1.0`,
           });
           return;
         }
@@ -1124,7 +1124,7 @@ export default function App() {
       if (navigator.share) {
         await navigator.share({
           title: `صور من ${selectedFolder?.name}`,
-          text: `تمت مشاركة ${selectedPhotos.length} صورة من تطبيق Reef App`,
+          text: `تمت مشاركة ${selectedPhotos.length} صورة من تطبيق ReefSup V1.0`,
           url: window.location.href,
         });
       } else {
@@ -1193,7 +1193,7 @@ export default function App() {
           <MapPin className="w-12 h-12 text-white" />
         </motion.div>
         <div className="flex flex-col items-center gap-3">
-          <h1 className="text-4xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-b from-white to-white/40">Reef App</h1>
+          <h1 className="text-4xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-b from-white to-white/40">ReefSup V1.0</h1>
           <div className="flex items-center gap-3 px-4 py-2 bg-white/5 backdrop-blur-md rounded-full border border-white/10">
             <RefreshCw className="w-3 h-3 animate-spin text-blue-400" />
             <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-zinc-500">Initializing Experience</span>
@@ -1217,7 +1217,7 @@ export default function App() {
           <div className="w-24 h-24 bg-blue-600/20 rounded-3xl flex items-center justify-center mb-8 border border-blue-500/30 shadow-2xl shadow-blue-900/20">
             <MapPin className="w-12 h-12 text-blue-400" />
           </div>
-          <h1 className="text-4xl font-bold mb-4 tracking-tight drop-shadow-md">Reef App</h1>
+          <h1 className="text-4xl font-bold mb-4 tracking-tight drop-shadow-md">ReefSup V1.0</h1>
           <p className="text-zinc-400 text-center mb-10 leading-relaxed">
             قم بتسجيل الدخول لحفظ صورك ومجلداتك بأمان على السحابة والوصول إليها من أي مكان.
           </p>
@@ -1297,7 +1297,7 @@ export default function App() {
           <div className="bg-blue-600 p-1.5 rounded-lg shadow-lg shadow-blue-900/20">
             <MapPin className="w-5 h-5" />
           </div>
-          <h1 className="text-lg font-bold tracking-tight drop-shadow-md">Reef App</h1>
+          <h1 className="text-lg font-bold tracking-tight drop-shadow-md">ReefSup V1.0</h1>
         </div>
         <div className="flex items-center gap-2">
           {/* Camera Button */}
@@ -1932,11 +1932,11 @@ export default function App() {
                             try {
                               const response = await fetch(selectedPhoto.imageUrl);
                               const blob = await response.blob();
-                              const file = new File([blob], `Reef_Photo_${new Date().getTime()}.jpg`, { type: 'image/jpeg' });
+                              const file = new File([blob], `ReefSup_Photo_${new Date().getTime()}.jpg`, { type: 'image/jpeg' });
                               if (navigator.canShare({ files: [file] })) {
                                 await navigator.share({
                                   files: [file],
-                                  title: 'Reef App Photo',
+                                  title: 'ReefSup Photo',
                                 });
                                 return;
                               }
@@ -1947,7 +1947,7 @@ export default function App() {
 
                           if (navigator.share) {
                             navigator.share({
-                              title: 'Reef App Photo',
+                              title: 'ReefSup Photo',
                               url: window.location.href
                             });
                           } else {
