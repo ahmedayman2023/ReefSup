@@ -1,0 +1,106 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: folders
+    // Document ID: auto-generated
+    // Fields:
+    //   - name: string (required, 1-50 chars)
+    //   - ownerId: string (required, matches auth.uid)
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: photos
+    // Document ID: auto-generated
+    // Fields:
+    //   - folderId: string (required, valid folder ID)
+    //   - imageUrl: string (required, base64 data < 1MB)
+    //   - latitude: number (required)
+    //   - longitude: number (required)
+    //   - address: string (optional)
+    //   - timestamp: string (optional)
+    //   - ownerId: string (required, matches auth.uid)
+    //   - createdAt: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isDocOwner() {
+      return isAuthenticated() && request.auth.uid == resource.data.ownerId;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function isValidStringLength(field, minLen, maxLen) {
+      return request.resource.data[field] is string &&
+        request.resource.data[field].size() >= minLen &&
+        request.resource.data[field].size() <= maxLen;
+    }
+
+    // ===============================================================
+    // Domain Validators
+    // ===============================================================
+
+    function isValidFolder(data) {
+      return hasRequiredFields(['name', 'ownerId', 'createdAt']) &&
+             hasOnlyAllowedFields(['name', 'ownerId', 'createdAt']) &&
+             data.name is string && data.name.size() > 0 && data.name.size() <= 50 &&
+             data.ownerId == request.auth.uid &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidPhoto(data) {
+      return hasRequiredFields(['folderId', 'imageUrl', 'latitude', 'longitude', 'ownerId', 'createdAt']) &&
+             hasOnlyAllowedFields(['folderId', 'imageUrl', 'latitude', 'longitude', 'address', 'timestamp', 'ownerId', 'createdAt']) &&
+             data.folderId is string &&
+             data.imageUrl is string && data.imageUrl.size() < 1048576 && // 1MB limit
+             data.latitude is number &&
+             data.longitude is number &&
+             data.ownerId == request.auth.uid &&
+             data.createdAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /folders/{folderId} {
+      allow read: if isDocOwner();
+      allow create: if isAuthenticated() && isValidFolder(request.resource.data);
+      allow update: if isDocOwner() && isValidFolder(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+
+    match /photos/{photoId} {
+      allow read: if isDocOwner();
+      allow create: if isAuthenticated() && isValidPhoto(request.resource.data);
+      allow update: if isDocOwner() && isValidPhoto(request.resource.data);
+      allow delete: if isDocOwner();
+    }
+
+    // Default deny
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "name": "Reef App",
+  "description": "تطبيق يلتقط صوراً مع إضافة معلومات الموقع الجغرافي وخريطة مصغرة عليها.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}

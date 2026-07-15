@@ -1,0 +1,76 @@
+{
+  "entities": {
+    "Folder": {
+      "title": "Folder",
+      "description": "A collection of photos organized by the user.",
+      "type": "object",
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "The name of the folder."
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "The UID of the user who owns this folder."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the folder was created."
+        }
+      },
+      "required": ["name", "ownerId", "createdAt"]
+    },
+    "Photo": {
+      "title": "Photo",
+      "description": "A photo captured with GPS metadata.",
+      "type": "object",
+      "properties": {
+        "folderId": {
+          "type": "string",
+          "description": "The ID of the folder this photo belongs to."
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "The base64 encoded image data (must be < 1MB)."
+        },
+        "latitude": {
+          "type": "number",
+          "description": "Latitude where the photo was taken."
+        },
+        "longitude": {
+          "type": "number",
+          "description": "Longitude where the photo was taken."
+        },
+        "address": {
+          "type": "string",
+          "description": "The human-readable address."
+        },
+        "timestamp": {
+          "type": "string",
+          "description": "The timestamp string from the map camera."
+        },
+        "ownerId": {
+          "type": "string",
+          "description": "The UID of the user who owns this photo."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the photo record was created."
+        }
+      },
+      "required": ["folderId", "imageUrl", "latitude", "longitude", "ownerId", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/folders/{folderId}": {
+      "schema": "Folder",
+      "description": "Collection of user folders."
+    },
+    "/photos/{photoId}": {
+      "schema": "Photo",
+      "description": "Collection of photos with GPS data."
+    }
+  }
+}
