@@ -4,7 +4,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
-import { Camera, MapPin, RefreshCw, Download, X, Info, FolderPlus, Folder, Image as ImageIcon, LogOut, LogIn, ChevronLeft, Trash2, Save, ArrowLeft, Check, Share2, FolderSync, ZoomIn, ZoomOut, Database, Upload, User as UserIcon, Edit2 } from 'lucide-react';
+import { Camera, MapPin, RefreshCw, Download, X, Info, FolderPlus, Folder, Image as ImageIcon, LogOut, LogIn, ChevronLeft, Trash2, Save, ArrowLeft, Check, Share2, FolderSync, ZoomIn, ZoomOut, Database, Upload, User as UserIcon, Edit2, Search } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { 
   auth, db, googleProvider, signInWithPopup, signOut, onAuthStateChanged, 
@@ -1001,6 +1001,24 @@ export default function App() {
       if (view === 'folders') setView('camera');
     } catch (err) {
       handleFirestoreError(err, OperationType.CREATE, 'folders');
+    }
+  };
+
+  const selectExistingFolder = (folder: FolderItem) => {
+    setSelectedFolder(folder);
+    setNewFolderName('');
+    setIsCreatingFolder(false);
+    if (view === 'folders') setView('camera');
+  };
+
+  const handleFolderSearchEnter = () => {
+    const query = newFolderName.trim();
+    if (!query) return;
+    const exactMatch = folders.find(f => f.name.trim().toLowerCase() === query.toLowerCase());
+    if (exactMatch) {
+      selectExistingFolder(exactMatch);
+    } else {
+      createFolder();
     }
   };
 
@@ -2371,12 +2389,12 @@ export default function App() {
                 <div className="flex justify-between items-start">
                   <div>
                     <h3 className="text-xl font-bold flex items-center gap-2">
-                      <FolderPlus className="w-5 h-5 text-blue-400" />
-                      إنشاء مجلد جديد
+                      <Search className="w-5 h-5 text-blue-400" />
+                      البحث عن مشروع
                     </h3>
-                    <p className="text-xs text-zinc-500 mt-1">يرجى إدخال اسم المجلد الجديد لتنظيم صورك بداخله.</p>
+                    <p className="text-xs text-zinc-500 mt-1">ابحث عن مشروع موجود لاختياره، أو اكتب اسمًا جديدًا لإنشائه.</p>
                   </div>
-                  <button 
+                  <button
                     onClick={() => {
                       setIsCreatingFolder(false);
                       setNewFolderName('');
@@ -2388,34 +2406,63 @@ export default function App() {
                 </div>
 
                 <div className="flex flex-col gap-2 mt-2">
-                  <label className="text-xs font-bold text-zinc-400">اسم المجلد</label>
-                  <input 
-                    type="text"
-                    placeholder="مثال: صور العمل، رحلة برية، مشروع الدمام..."
-                    value={newFolderName}
-                    onChange={e => setNewFolderName(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && createFolder()}
-                    className="w-full bg-zinc-800 border-none rounded-2xl p-4 text-sm placeholder-zinc-600 text-white focus:ring-2 focus:ring-blue-500"
-                    autoFocus
-                  />
+                  <label className="text-xs font-bold text-zinc-400">اسم المشروع</label>
+                  <div className="relative">
+                    <Search className="w-4 h-4 text-zinc-600 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      type="text"
+                      placeholder="ابحث عن مشروع أو اكتب اسمًا جديدًا..."
+                      value={newFolderName}
+                      onChange={e => setNewFolderName(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleFolderSearchEnter()}
+                      className="w-full bg-zinc-800 border-none rounded-2xl p-4 pr-11 text-sm placeholder-zinc-600 text-white focus:ring-2 focus:ring-blue-500"
+                      autoFocus
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-2 max-h-64 overflow-y-auto">
+                  {folders
+                    .filter(f => f.name.toLowerCase().includes(newFolderName.trim().toLowerCase()))
+                    .map(f => (
+                      <button
+                        key={f.id}
+                        onClick={() => selectExistingFolder(f)}
+                        className="flex items-center gap-3 p-3 bg-zinc-800/60 hover:bg-zinc-800 rounded-2xl text-right transition-colors cursor-pointer"
+                      >
+                        <div className="p-2 rounded-xl bg-zinc-700/50 text-blue-400 shrink-0">
+                          <Folder className="w-4 h-4" />
+                        </div>
+                        <span className="text-sm font-bold truncate flex-1">{f.name}</span>
+                      </button>
+                    ))}
+
+                  {newFolderName.trim() && !folders.some(f => f.name.trim().toLowerCase() === newFolderName.trim().toLowerCase()) && (
+                    <button
+                      onClick={createFolder}
+                      className="flex items-center gap-3 p-3 bg-blue-600/10 hover:bg-blue-600/20 border border-dashed border-blue-500/40 rounded-2xl text-right transition-colors cursor-pointer"
+                    >
+                      <div className="p-2 rounded-xl bg-blue-500/20 text-blue-400 shrink-0">
+                        <FolderPlus className="w-4 h-4" />
+                      </div>
+                      <span className="text-sm font-bold text-blue-400 truncate flex-1">إنشاء مشروع جديد باسم "{newFolderName.trim()}"</span>
+                    </button>
+                  )}
+
+                  {!newFolderName.trim() && folders.length === 0 && (
+                    <p className="text-xs text-zinc-600 text-center py-6">لا توجد مشاريع بعد. اكتب اسمًا لإنشاء أول مشروع.</p>
+                  )}
                 </div>
 
                 <div className="flex gap-3 pt-2">
-                  <button 
+                  <button
                     onClick={() => {
                       setIsCreatingFolder(false);
                       setNewFolderName('');
-                    }} 
+                    }}
                     className="flex-1 py-3.5 bg-zinc-800 hover:bg-zinc-750 rounded-xl text-zinc-400 font-bold text-sm transition-colors cursor-pointer border border-white/5"
                   >
                     إلغاء
-                  </button>
-                  <button 
-                    onClick={createFolder} 
-                    disabled={!newFolderName.trim()}
-                    className="flex-1 bg-blue-600 hover:bg-blue-500 rounded-xl py-3.5 font-bold text-sm text-white shadow-lg shadow-blue-600/20 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    تأكيد الإنشاء
                   </button>
                 </div>
               </motion.div>
