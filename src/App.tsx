@@ -88,7 +88,11 @@ export default function App() {
 
   // Upload State
   const [uploadedImageSrc, setUploadedImageSrc] = useState<string | null>(null);
+  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [isMerging, setIsMerging] = useState(false);
+  const [isDraggingFile, setIsDraggingFile] = useState(false);
+  const [uploadMapsUrl, setUploadMapsUrl] = useState('');
+  const [isImportingUploadLocation, setIsImportingUploadLocation] = useState(false);
 
   // Camera State
   const [stream, setStream] = useState<MediaStream | null>(null);
@@ -281,6 +285,8 @@ export default function App() {
     if (isAuthReady && user && view === 'camera') {
       startCamera();
       updateLocation();
+    } else if (isAuthReady && user && view === 'upload' && !location) {
+      updateLocation();
     }
     return () => {
       if (stream) stream.getTracks().forEach(track => track.stop());
@@ -416,6 +422,46 @@ export default function App() {
       setTimeout(() => setError(null), 4000);
     }
   }, [googleMapsUrl, syncMapPosition]);
+
+  const handleImportUploadMapsUrl = useCallback(async () => {
+    if (!uploadMapsUrl.trim()) return;
+    const coords = parseGoogleMapsUrl(uploadMapsUrl);
+    if (!coords) {
+      setError("تعذر استخراج الإحداثيات من هذا الرابط. يرجى التأكد من أنه رابط خرائط جوجل صالح.");
+      setTimeout(() => setError(null), 4000);
+      return;
+    }
+
+    setIsImportingUploadLocation(true);
+    const timestamp = new Date().toLocaleString('en-GB', {
+      weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true, timeZoneName: 'short'
+    });
+
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${coords.lat}&lon=${coords.lon}&zoom=18&addressdetails=1`, {
+        headers: { 'Accept-Language': 'ar,en' }
+      });
+      const data = await response.json();
+      const addr = data?.address || {};
+      setLocation({
+        latitude: coords.lat,
+        longitude: coords.lon,
+        timestamp,
+        address: data?.display_name || "",
+        city: addr.city || addr.town || addr.village || addr.suburb || addr.state || "",
+        country: addr.country || ""
+      });
+    } catch (err) {
+      console.error("Reverse geocoding failed", err);
+      setLocation({ latitude: coords.lat, longitude: coords.lon, timestamp });
+    }
+
+    setUploadMapsUrl('');
+    setIsImportingUploadLocation(false);
+    setSuccessMessage("تم استيراد الموقع بنجاح من الرابط 📍");
+    setTimeout(() => setSuccessMessage(null), 3000);
+  }, [uploadMapsUrl]);
 
   const handleSearchLocation = useCallback(async () => {
     if (!searchLocationQuery.trim()) return;
@@ -816,15 +862,34 @@ export default function App() {
     }
   }, [user, capturedImage, location, selectedFolder]);
 
-  const handleImageFileChange = (e: any) => {
-    const file = e.target.files?.[0];
+  const handleImageFile = (file: File | undefined | null) => {
     if (!file) return;
-    
+
+    if (!file.type.startsWith('image/')) {
+      setError("الملف المختار ليس صورة صالحة");
+      return;
+    }
+
     const reader = new FileReader();
+    reader.onerror = () => {
+      setError("تعذر قراءة الصورة المختارة، حاول مرة أخرى");
+    };
     reader.onload = (event) => {
       setUploadedImageSrc(event.target?.result as string);
+      setUploadedFileName(file.name);
     };
     reader.readAsDataURL(file);
+  };
+
+  const handleImageFileChange = (e: any) => {
+    handleImageFile(e.target.files?.[0]);
+    e.target.value = '';
+  };
+
+  const handleImageDrop = (e: any) => {
+    e.preventDefault();
+    setIsDraggingFile(false);
+    handleImageFile(e.dataTransfer.files?.[0]);
   };
 
   const mergeLocation = async () => {
@@ -862,7 +927,7 @@ export default function App() {
             console.warn("Map load timed out, proceeding without map");
             finalizeMerge();
           }
-        }, 800);
+        }, 3000);
 
         const finalizeMerge = () => {
           if (mapLoaded) return;
@@ -1786,141 +1851,205 @@ export default function App() {
             className="w-full relative flex flex-col bg-zinc-950 min-h-full pb-24 p-6"
           >
             <div className="max-w-xl mx-auto w-full">
-              <div className="mb-8">
-                <h2 className="text-3xl font-bold tracking-tight">دمج الموقع بالصور</h2>
-                <p className="text-xs text-zinc-500 mt-1">ارفع أي صورة من جهازك ليتم ختم بيانات موقعك الحالي وخريطة تفاعلية عليها</p>
+              <div className="mb-8 flex items-center gap-3">
+                <div className="w-11 h-11 bg-blue-600/15 rounded-2xl flex items-center justify-center border border-blue-500/20 shrink-0">
+                  <FolderSync className="w-5 h-5 text-blue-400" />
+                </div>
+                <div>
+                  <h2 className="text-2xl font-bold tracking-tight">دمج الموقع بالصور</h2>
+                  <p className="text-xs text-zinc-500 mt-0.5">ارفع أي صورة من جهازك ليتم ختم بيانات موقعك الحالي وخريطة تفاعلية عليها</p>
+                </div>
               </div>
 
               {/* Selected Folder Indicator */}
               {selectedFolder ? (
-                <div className="mb-6 p-4 bg-zinc-900 rounded-2xl border border-white/5 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Folder className="w-5 h-5 text-blue-400" />
-                    <div className="text-right">
-                      <p className="text-xs text-zinc-400">سيتم حفظ الصورة المدمجة في:</p>
-                      <p className="text-sm font-bold text-white">{selectedFolder.name}</p>
+                <div className="mb-5 p-4 bg-zinc-900 rounded-2xl border border-white/5 flex items-center justify-between">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="w-10 h-10 bg-blue-600/20 rounded-xl flex items-center justify-center border border-blue-500/10 shrink-0">
+                      <Folder className="w-5 h-5 text-blue-400" />
+                    </div>
+                    <div className="text-right min-w-0">
+                      <p className="text-xs text-zinc-500">سيتم حفظ الصورة المدمجة في</p>
+                      <p className="text-sm font-bold text-white truncate">{selectedFolder.name}</p>
                     </div>
                   </div>
-                  <button 
-                    onClick={() => setView('folders')} 
-                    className="text-xs text-blue-400 font-bold hover:underline"
+                  <button
+                    onClick={() => setView('folders')}
+                    className="text-xs text-blue-400 font-bold hover:underline shrink-0 cursor-pointer"
                   >
                     تغيير المجلد
                   </button>
                 </div>
               ) : (
-                <div className="mb-6 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-2xl text-yellow-400 text-sm flex flex-col gap-3">
+                <div className="mb-5 p-4 bg-yellow-500/10 border border-yellow-500/20 rounded-2xl text-yellow-400 text-sm flex flex-col gap-3">
                   <p className="font-bold">يرجى تحديد المجلد الذي تود حفظ الصور فيه أولاً.</p>
-                  <button 
-                    onClick={() => setView('folders')} 
-                    className="bg-yellow-500 text-black px-4 py-2 rounded-xl font-bold text-xs self-start"
+                  <button
+                    onClick={() => setView('folders')}
+                    className="bg-yellow-500 text-black px-4 py-2 rounded-xl font-bold text-xs self-start cursor-pointer"
                   >
                     الذهاب للمجلدات
                   </button>
                 </div>
               )}
 
-              {/* File Upload Dropzone */}
-              {!uploadedImageSrc ? (
-                <div className="relative group border-2 border-dashed border-zinc-800 hover:border-blue-500/40 rounded-[2rem] p-10 text-center bg-zinc-900/20 transition-all">
-                  <input 
-                    type="file" 
-                    accept="image/*" 
-                    onChange={handleImageFileChange}
-                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                  />
-                  <div className="flex flex-col items-center gap-4">
-                    <div className="w-16 h-16 bg-blue-500/10 rounded-full flex items-center justify-center text-blue-400 group-hover:scale-110 transition-transform">
-                      <ImageIcon className="w-8 h-8" />
-                    </div>
-                    <div>
-                      <h3 className="font-bold text-lg mb-1">اختر صورة أو اسحبها هنا</h3>
-                      <p className="text-xs text-zinc-500">يدعم صيغ JPG، PNG، WEBP وغيرها</p>
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-6">
-                  {/* Image Preview Container */}
-                  <div className="relative rounded-3xl overflow-hidden border border-white/5 bg-zinc-900 aspect-video flex items-center justify-center">
-                    <img 
-                      src={uploadedImageSrc} 
-                      alt="Uploaded preview" 
-                      className="max-w-full max-h-full object-contain"
+              <AnimatePresence mode="wait">
+                {!uploadedImageSrc ? (
+                  /* File Upload Dropzone */
+                  <motion.div
+                    key="dropzone"
+                    initial={{ opacity: 0 }}
+                    animate={{ opacity: 1 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.25 }}
+                    onDragEnter={(e) => { e.preventDefault(); setIsDraggingFile(true); }}
+                    onDragOver={(e) => { e.preventDefault(); setIsDraggingFile(true); }}
+                    onDragLeave={(e) => { e.preventDefault(); setIsDraggingFile(false); }}
+                    onDrop={handleImageDrop}
+                    className={`relative group border-2 border-dashed rounded-[2rem] p-10 text-center transition-all ${isDraggingFile ? 'border-blue-500 bg-blue-500/10 scale-[1.01]' : 'border-zinc-800 hover:border-blue-500/40 bg-zinc-900/20'}`}
+                  >
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={handleImageFileChange}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                     />
-                    <button 
-                      onClick={() => setUploadedImageSrc(null)}
-                      className="absolute top-4 right-4 p-2 bg-black/60 backdrop-blur-md rounded-full text-zinc-400 hover:text-white transition-colors border border-white/10"
-                    >
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-
-                  {/* Active Location Card */}
-                  {location ? (
-                    <div className="p-4 bg-zinc-900 hover:bg-zinc-800/80 hover:border-blue-500/30 transition-all cursor-pointer group rounded-2xl border border-white/5 flex items-center justify-between gap-3">
-                      <div className="flex items-center gap-3 flex-1 min-w-0" onClick={handleOpenEditLocation}>
-                        <div className="w-10 h-10 bg-blue-600/30 rounded-xl flex items-center justify-center border border-blue-500/20 shrink-0 group-hover:bg-blue-600/40 transition-colors">
-                          <MapPin className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" />
-                        </div>
-                        <div className="flex-1 min-w-0 text-right font-medium">
-                          <p className="font-bold text-sm text-white truncate">{location.city || 'تحديد الموقع...'}</p>
-                          <p className="text-xs text-zinc-500 truncate mt-0.5">{location.address}</p>
-                        </div>
+                    <div className="flex flex-col items-center gap-4 pointer-events-none">
+                      <div className={`w-16 h-16 rounded-full flex items-center justify-center transition-all ${isDraggingFile ? 'bg-blue-500/20 text-blue-300 scale-110' : 'bg-blue-500/10 text-blue-400 group-hover:scale-110'}`}>
+                        <ImageIcon className="w-8 h-8" />
                       </div>
-                      <div className="flex items-center gap-2 shrink-0">
-                        <button 
-                          onClick={handleOpenEditLocation}
-                          className="p-2 bg-zinc-800 hover:bg-zinc-700 hover:text-white rounded-full text-zinc-400 transition-colors cursor-pointer"
-                          title="تعديل الموقع"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={updateLocation}
-                          disabled={isLocating}
-                          className="p-2 bg-zinc-800 hover:bg-zinc-700 hover:text-white rounded-full text-zinc-400 transition-colors cursor-pointer"
-                          title="تحديث الموقع"
-                        >
-                          <RefreshCw className={`w-4 h-4 ${isLocating ? 'animate-spin' : ''}`} />
-                        </button>
+                      <div>
+                        <h3 className="font-bold text-lg mb-1">{isDraggingFile ? 'أفلت الصورة هنا' : 'اختر صورة أو اسحبها هنا'}</h3>
+                        <p className="text-xs text-zinc-500">يدعم صيغ JPG، PNG، WEBP وغيرها</p>
                       </div>
                     </div>
-                  ) : (
-                    <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 text-sm flex items-center justify-between">
-                      <span>جاري تحديد موقعك الجغرافي...</span>
-                      <button 
-                        onClick={updateLocation}
-                        disabled={isLocating}
-                        className="bg-red-500 text-white px-3 py-1.5 rounded-xl font-bold text-xs"
+                  </motion.div>
+                ) : (
+                  <motion.div
+                    key="preview"
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.25 }}
+                    className="space-y-5"
+                  >
+                    {/* Image Preview Container */}
+                    <div className="relative rounded-3xl overflow-hidden border border-white/5 bg-zinc-900 aspect-video flex items-center justify-center">
+                      <img
+                        src={uploadedImageSrc}
+                        alt="Uploaded preview"
+                        className="max-w-full max-h-full object-contain"
+                      />
+                      {uploadedFileName && (
+                        <div className="absolute bottom-3 right-3 max-w-[70%] px-3 py-1.5 bg-black/60 backdrop-blur-md rounded-full border border-white/10 text-[11px] text-zinc-300 truncate">
+                          {uploadedFileName}
+                        </div>
+                      )}
+                      <button
+                        onClick={() => { setUploadedImageSrc(null); setUploadedFileName(null); }}
+                        className="absolute top-4 right-4 p-2 bg-black/60 backdrop-blur-md rounded-full text-zinc-400 hover:text-white transition-colors border border-white/10 cursor-pointer"
+                        title="إزالة الصورة"
                       >
-                        {isLocating ? "جاري التحديد..." : "تحديث"}
+                        <X className="w-5 h-5" />
                       </button>
                     </div>
-                  )}
 
-                  {/* Merge Action Button */}
-                  <motion.button
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    onClick={mergeLocation}
-                    disabled={isMerging || !location}
-                    className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-xl shadow-blue-600/20 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-3 text-lg"
-                  >
-                    {isMerging ? (
-                      <>
-                        <RefreshCw className="w-6 h-6 animate-spin" />
-                        جاري دمج الموقع والتوليد...
-                      </>
+                    {/* Google Maps Link Import */}
+                    <div className="p-4 bg-zinc-900 rounded-2xl border border-white/5 flex flex-col gap-2">
+                      <label className="text-xs font-bold text-zinc-400">أو الصق رابط خرائط جوجل مباشرة</label>
+                      <div className="flex gap-2">
+                        <input
+                          type="text"
+                          placeholder="الصق رابط الموقع أو الإحداثيات هنا..."
+                          value={uploadMapsUrl}
+                          onChange={e => setUploadMapsUrl(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && handleImportUploadMapsUrl()}
+                          className="flex-1 bg-zinc-800 border-none rounded-xl p-2.5 text-xs text-white placeholder-zinc-600 focus:ring-1 focus:ring-blue-500"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleImportUploadMapsUrl}
+                          disabled={isImportingUploadLocation || !uploadMapsUrl.trim()}
+                          className="bg-blue-600 hover:bg-blue-500 px-4 py-2.5 rounded-xl font-bold text-xs transition-colors shrink-0 cursor-pointer disabled:opacity-50 flex items-center gap-1.5"
+                        >
+                          {isImportingUploadLocation && <RefreshCw className="w-3.5 h-3.5 animate-spin" />}
+                          استيراد
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Active Location Card */}
+                    {location ? (
+                      <div className="p-4 bg-zinc-900 hover:bg-zinc-800/80 hover:border-blue-500/30 transition-all cursor-pointer group rounded-2xl border border-white/5 flex items-center justify-between gap-3">
+                        <div className="flex items-center gap-3 flex-1 min-w-0" onClick={handleOpenEditLocation}>
+                          <div className="w-10 h-10 bg-blue-600/30 rounded-xl flex items-center justify-center border border-blue-500/20 shrink-0 group-hover:bg-blue-600/40 transition-colors">
+                            <MapPin className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform" />
+                          </div>
+                          <div className="flex-1 min-w-0 text-right font-medium">
+                            <p className="font-bold text-sm text-white truncate">{location.city || 'تحديد الموقع...'}</p>
+                            <p className="text-xs text-zinc-500 truncate mt-0.5">{location.address}</p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={handleOpenEditLocation}
+                            className="p-2 bg-zinc-800 hover:bg-zinc-700 hover:text-white rounded-full text-zinc-400 transition-colors cursor-pointer"
+                            title="تعديل الموقع"
+                          >
+                            <Edit2 className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={updateLocation}
+                            disabled={isLocating}
+                            className="p-2 bg-zinc-800 hover:bg-zinc-700 hover:text-white rounded-full text-zinc-400 transition-colors cursor-pointer disabled:opacity-50"
+                            title="تحديث الموقع"
+                          >
+                            <RefreshCw className={`w-4 h-4 ${isLocating ? 'animate-spin' : ''}`} />
+                          </button>
+                        </div>
+                      </div>
+                    ) : isLocating ? (
+                      <div className="p-4 bg-blue-500/10 border border-blue-500/20 rounded-2xl text-blue-300 text-sm flex items-center gap-3">
+                        <RefreshCw className="w-4 h-4 animate-spin shrink-0" />
+                        <span>جاري تحديد موقعك الجغرافي...</span>
+                      </div>
                     ) : (
-                      <>
-                        <FolderSync className="w-6 h-6" />
-                        دمج الموقع وحفظ الصورة
-                      </>
+                      <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl text-red-400 text-sm flex items-center justify-between gap-3">
+                        <span>تعذر تحديد موقعك، تأكد من تفعيل الـ GPS</span>
+                        <button
+                          onClick={updateLocation}
+                          className="bg-red-500 text-white px-3 py-1.5 rounded-xl font-bold text-xs shrink-0 cursor-pointer"
+                        >
+                          إعادة المحاولة
+                        </button>
+                      </div>
                     )}
-                  </motion.button>
-                </div>
-              )}
+
+                    {/* Merge Action Button */}
+                    <motion.button
+                      whileHover={{ scale: 1.02 }}
+                      whileTap={{ scale: 0.98 }}
+                      onClick={mergeLocation}
+                      disabled={isMerging || !location}
+                      className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-xl shadow-blue-600/20 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-3 text-lg cursor-pointer"
+                    >
+                      {isMerging ? (
+                        <>
+                          <RefreshCw className="w-6 h-6 animate-spin" />
+                          جاري دمج الموقع والتوليد...
+                        </>
+                      ) : (
+                        <>
+                          <FolderSync className="w-6 h-6" />
+                          دمج الموقع وحفظ الصورة
+                        </>
+                      )}
+                    </motion.button>
+                    {!selectedFolder && (
+                      <p className="text-center text-[11px] text-zinc-500 -mt-2">سيتم إنشاء الصورة المدمجة كمعاينة فقط حتى تختار مجلدًا لحفظها</p>
+                    )}
+                  </motion.div>
+                )}
+              </AnimatePresence>
             </div>
           </motion.div>
         )}
