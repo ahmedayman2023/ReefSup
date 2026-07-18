@@ -19,6 +19,7 @@ interface LocationData {
   city?: string;
   country?: string;
   timestamp: string;
+  rawTimestamp?: string;
 }
 
 interface FolderItem {
@@ -103,6 +104,7 @@ export default function App() {
   const [editAddress, setEditAddress] = useState('');
   const [editLatitude, setEditLatitude] = useState(0);
   const [editLongitude, setEditLongitude] = useState(0);
+  const [editDateTime, setEditDateTime] = useState('');
   const [googleMapsUrl, setGoogleMapsUrl] = useState('');
   const [searchLocationQuery, setSearchLocationQuery] = useState('');
   const [searchLocationResults, setSearchLocationResults] = useState<any[]>([]);
@@ -293,6 +295,17 @@ export default function App() {
     };
   }, [facingMode, view, user, isAuthReady]);
 
+  const formatTimestamp = (date: Date) => date.toLocaleString('en-GB', {
+    weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true, timeZoneName: 'short'
+  });
+
+  // Converts a Date to the "YYYY-MM-DDTHH:mm" value a <input type="datetime-local"> expects, in local time
+  const toDatetimeLocalValue = (date: Date) => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  };
+
   const updateLocation = useCallback(() => {
     if (!navigator.geolocation) {
       setError("المتصفح لا يدعم تحديد الموقع");
@@ -301,21 +314,20 @@ export default function App() {
     setIsLocating(true);
     navigator.geolocation.getCurrentPosition(async (position) => {
       const { latitude, longitude } = position.coords;
-      const timestamp = new Date().toLocaleString('en-GB', {
-        weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric',
-        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true, timeZoneName: 'short'
-      });
+      const now = new Date();
+      const timestamp = formatTimestamp(now);
+      const rawTimestamp = now.toISOString();
       try {
         const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`);
         const data = await response.json();
         setLocation({
-          latitude, longitude, timestamp,
+          latitude, longitude, timestamp, rawTimestamp,
           address: data.display_name,
           city: data.address.city || data.address.town || data.address.village || "",
           country: data.address.country || ""
         });
       } catch {
-        setLocation({ latitude, longitude, timestamp });
+        setLocation({ latitude, longitude, timestamp, rawTimestamp });
       }
       setIsLocating(false);
     }, () => {
@@ -359,12 +371,20 @@ export default function App() {
     return null;
   };
 
+  const getMapsUrlErrorMessage = (url: string) => {
+    if (/goo\.gl|maps\.app\.goo\.gl/i.test(url)) {
+      return "هذا رابط مختصر من تطبيق جوجل ماب ولا يحتوي على الإحداثيات مباشرة. افتح الرابط في المتصفح، وانسخ الرابط الكامل من شريط العنوان (الذي يحتوي على @ يتبعه رقمين) والصقه هنا.";
+    }
+    return "تعذر استخراج الإحداثيات من هذا الرابط. يرجى التأكد من أنه رابط خرائط جوجل صالح يحتوي على الإحداثيات (مثال: @24.7136,46.6753).";
+  };
+
   const handleOpenEditLocation = useCallback(() => {
     if (location) {
       setEditCity(location.city || '');
       setEditAddress(location.address || '');
       setEditLatitude(location.latitude);
       setEditLongitude(location.longitude);
+      setEditDateTime(toDatetimeLocalValue(location.rawTimestamp ? new Date(location.rawTimestamp) : new Date()));
       setGoogleMapsUrl('');
       setSearchLocationQuery('');
       setSearchLocationResults([]);
@@ -374,16 +394,20 @@ export default function App() {
 
   const handleSaveLocation = useCallback(() => {
     if (location) {
+      const parsedDate = editDateTime ? new Date(editDateTime) : null;
+      const isValidDate = parsedDate && !isNaN(parsedDate.getTime());
       setLocation({
         ...location,
         city: editCity,
         address: editAddress,
         latitude: Number(editLatitude),
-        longitude: Number(editLongitude)
+        longitude: Number(editLongitude),
+        timestamp: isValidDate ? formatTimestamp(parsedDate) : location.timestamp,
+        rawTimestamp: isValidDate ? parsedDate.toISOString() : location.rawTimestamp
       });
       setIsEditingLocation(false);
     }
-  }, [location, editCity, editAddress, editLatitude, editLongitude]);
+  }, [location, editCity, editAddress, editLatitude, editLongitude, editDateTime]);
 
   const syncMapPosition = useCallback((lat: number, lng: number) => {
     if (mapInstanceRef.current && markerInstanceRef.current) {
@@ -418,8 +442,8 @@ export default function App() {
       setSuccessMessage("تم استيراد الموقع بنجاح من الرابط 📍");
       setTimeout(() => setSuccessMessage(null), 3000);
     } else {
-      setError("تعذر استخراج الإحداثيات من هذا الرابط. يرجى التأكد من أنه رابط خرائط جوجل صالح.");
-      setTimeout(() => setError(null), 4000);
+      setError(getMapsUrlErrorMessage(googleMapsUrl));
+      setTimeout(() => setError(null), 6000);
     }
   }, [googleMapsUrl, syncMapPosition]);
 
@@ -427,16 +451,15 @@ export default function App() {
     if (!uploadMapsUrl.trim()) return;
     const coords = parseGoogleMapsUrl(uploadMapsUrl);
     if (!coords) {
-      setError("تعذر استخراج الإحداثيات من هذا الرابط. يرجى التأكد من أنه رابط خرائط جوجل صالح.");
-      setTimeout(() => setError(null), 4000);
+      setError(getMapsUrlErrorMessage(uploadMapsUrl));
+      setTimeout(() => setError(null), 6000);
       return;
     }
 
     setIsImportingUploadLocation(true);
-    const timestamp = new Date().toLocaleString('en-GB', {
-      weekday: 'long', day: '2-digit', month: '2-digit', year: 'numeric',
-      hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true, timeZoneName: 'short'
-    });
+    const now = new Date();
+    const timestamp = formatTimestamp(now);
+    const rawTimestamp = now.toISOString();
 
     try {
       const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${coords.lat}&lon=${coords.lon}&zoom=18&addressdetails=1`, {
@@ -447,14 +470,14 @@ export default function App() {
       setLocation({
         latitude: coords.lat,
         longitude: coords.lon,
-        timestamp,
+        timestamp, rawTimestamp,
         address: data?.display_name || "",
         city: addr.city || addr.town || addr.village || addr.suburb || addr.state || "",
         country: addr.country || ""
       });
     } catch (err) {
       console.error("Reverse geocoding failed", err);
-      setLocation({ latitude: coords.lat, longitude: coords.lon, timestamp });
+      setLocation({ latitude: coords.lat, longitude: coords.lon, timestamp, rawTimestamp });
     }
 
     setUploadMapsUrl('');
@@ -2504,13 +2527,24 @@ export default function App() {
                   </div>
                   <div className="flex flex-col gap-1">
                     <label className="text-xs font-bold text-zinc-400">خط الطول</label>
-                    <input 
+                    <input
                       type="number"
                       step="any"
                       placeholder="46.6753"
                       value={editLongitude}
                       onChange={e => setEditLongitude(Number(e.target.value))}
                       className="w-full bg-zinc-800 border-none rounded-xl p-2.5 text-xs text-white placeholder-zinc-600 focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  {/* Date & Time Input */}
+                  <div className="flex flex-col gap-1 col-span-2">
+                    <label className="text-xs font-bold text-zinc-400">التاريخ والوقت (يظهر على الصورة)</label>
+                    <input
+                      type="datetime-local"
+                      value={editDateTime}
+                      onChange={e => setEditDateTime(e.target.value)}
+                      className="w-full bg-zinc-800 border-none rounded-xl p-2.5 text-xs text-white placeholder-zinc-600 focus:ring-1 focus:ring-blue-500 [color-scheme:dark]"
                     />
                   </div>
                 </div>
