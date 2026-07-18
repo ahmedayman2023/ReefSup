@@ -104,7 +104,8 @@ export default function App() {
   const [editAddress, setEditAddress] = useState('');
   const [editLatitude, setEditLatitude] = useState(0);
   const [editLongitude, setEditLongitude] = useState(0);
-  const [editDateTime, setEditDateTime] = useState('');
+  const [editDate, setEditDate] = useState('');
+  const [editTime, setEditTime] = useState('');
   const [googleMapsUrl, setGoogleMapsUrl] = useState('');
   const [searchLocationQuery, setSearchLocationQuery] = useState('');
   const [searchLocationResults, setSearchLocationResults] = useState<any[]>([]);
@@ -300,10 +301,14 @@ export default function App() {
     hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true, timeZoneName: 'short'
   });
 
-  // Converts a Date to the "YYYY-MM-DDTHH:mm" value a <input type="datetime-local"> expects, in local time
-  const toDatetimeLocalValue = (date: Date) => {
+  // Converts a Date to the "YYYY-MM-DD" / "HH:mm" values <input type="date"> / <input type="time"> expect, in local time
+  const toDateInputValue = (date: Date) => {
     const pad = (n: number) => String(n).padStart(2, '0');
-    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  };
+  const toTimeInputValue = (date: Date) => {
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${pad(date.getHours())}:${pad(date.getMinutes())}`;
   };
 
   const updateLocation = useCallback(() => {
@@ -359,6 +364,13 @@ export default function App() {
         return { lat: parseFloat(destMatch[1]), lon: parseFloat(destMatch[2]) };
       }
 
+      // Regex for the precise pin location Google embeds in place links: !3d24.7136!4d46.6753
+      const pinRegex = /!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/;
+      const pinMatch = url.match(pinRegex);
+      if (pinMatch) {
+        return { lat: parseFloat(pinMatch[1]), lon: parseFloat(pinMatch[2]) };
+      }
+
       // Regex for: raw lat, lon separated by commas
       const rawCoordsRegex = /(-?\d+\.\d+)\s*,\s*(-?\d+\.\d+)/;
       const rawMatch = url.match(rawCoordsRegex);
@@ -384,7 +396,9 @@ export default function App() {
       setEditAddress(location.address || '');
       setEditLatitude(location.latitude);
       setEditLongitude(location.longitude);
-      setEditDateTime(toDatetimeLocalValue(location.rawTimestamp ? new Date(location.rawTimestamp) : new Date()));
+      const baseDate = location.rawTimestamp ? new Date(location.rawTimestamp) : new Date();
+      setEditDate(toDateInputValue(baseDate));
+      setEditTime(toTimeInputValue(baseDate));
       setGoogleMapsUrl('');
       setSearchLocationQuery('');
       setSearchLocationResults([]);
@@ -394,7 +408,7 @@ export default function App() {
 
   const handleSaveLocation = useCallback(() => {
     if (location) {
-      const parsedDate = editDateTime ? new Date(editDateTime) : null;
+      const parsedDate = (editDate && editTime) ? new Date(`${editDate}T${editTime}`) : null;
       const isValidDate = parsedDate && !isNaN(parsedDate.getTime());
       setLocation({
         ...location,
@@ -407,7 +421,7 @@ export default function App() {
       });
       setIsEditingLocation(false);
     }
-  }, [location, editCity, editAddress, editLatitude, editLongitude, editDateTime]);
+  }, [location, editCity, editAddress, editLatitude, editLongitude, editDate, editTime]);
 
   const syncMapPosition = useCallback((lat: number, lng: number) => {
     if (mapInstanceRef.current && markerInstanceRef.current) {
@@ -419,32 +433,53 @@ export default function App() {
   const handleImportGoogleMapsUrl = useCallback(async () => {
     if (!googleMapsUrl.trim()) return;
     const coords = parseGoogleMapsUrl(googleMapsUrl);
-    if (coords) {
-      setEditLatitude(coords.lat);
-      setEditLongitude(coords.lon);
-      syncMapPosition(coords.lat, coords.lon);
-      
-      try {
-        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${coords.lat}&lon=${coords.lon}&zoom=18&addressdetails=1`, {
-          headers: { 'Accept-Language': 'ar,en' }
-        });
-        const data = await response.json();
-        if (data) {
-          const addr = data.address;
-          const city = addr.city || addr.town || addr.village || addr.suburb || addr.state || addr.country || "";
-          setEditCity(city);
-          setEditAddress(data.display_name || "");
-        }
-      } catch (err) {
-        console.error("Reverse geocoding failed", err);
-      }
-      setGoogleMapsUrl('');
-      setSuccessMessage("تم استيراد الموقع بنجاح من الرابط 📍");
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } else {
+    if (!coords) {
       setError(getMapsUrlErrorMessage(googleMapsUrl));
       setTimeout(() => setError(null), 6000);
+      return;
     }
+
+    setEditLatitude(coords.lat);
+    setEditLongitude(coords.lon);
+    syncMapPosition(coords.lat, coords.lon);
+
+    let city: string | undefined;
+    let address: string | undefined;
+    try {
+      const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${coords.lat}&lon=${coords.lon}&zoom=18&addressdetails=1`, {
+        headers: { 'Accept-Language': 'ar,en' }
+      });
+      const data = await response.json();
+      if (data) {
+        const addr = data.address;
+        city = addr.city || addr.town || addr.village || addr.suburb || addr.state || addr.country || "";
+        address = data.display_name || "";
+        setEditCity(city);
+        setEditAddress(address);
+      }
+    } catch (err) {
+      console.error("Reverse geocoding failed", err);
+    }
+
+    // Apply immediately so the imported location takes effect even without pressing "حفظ" separately
+    setLocation((prev: LocationData | null) => prev ? {
+      ...prev,
+      latitude: coords.lat,
+      longitude: coords.lon,
+      ...(city !== undefined ? { city } : {}),
+      ...(address !== undefined ? { address } : {})
+    } : {
+      latitude: coords.lat,
+      longitude: coords.lon,
+      city: city || '',
+      address: address || '',
+      timestamp: formatTimestamp(new Date()),
+      rawTimestamp: new Date().toISOString()
+    });
+
+    setGoogleMapsUrl('');
+    setSuccessMessage("تم استيراد الموقع وتطبيقه بنجاح 📍");
+    setTimeout(() => setSuccessMessage(null), 3000);
   }, [googleMapsUrl, syncMapPosition]);
 
   const handleImportUploadMapsUrl = useCallback(async () => {
@@ -2537,13 +2572,22 @@ export default function App() {
                     />
                   </div>
 
-                  {/* Date & Time Input */}
-                  <div className="flex flex-col gap-1 col-span-2">
-                    <label className="text-xs font-bold text-zinc-400">التاريخ والوقت (يظهر على الصورة)</label>
+                  {/* Date & Time Inputs */}
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-bold text-zinc-400">التاريخ (يظهر على الصورة)</label>
                     <input
-                      type="datetime-local"
-                      value={editDateTime}
-                      onChange={e => setEditDateTime(e.target.value)}
+                      type="date"
+                      value={editDate}
+                      onChange={e => setEditDate(e.target.value)}
+                      className="w-full bg-zinc-800 border-none rounded-xl p-2.5 text-xs text-white placeholder-zinc-600 focus:ring-1 focus:ring-blue-500 [color-scheme:dark]"
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1">
+                    <label className="text-xs font-bold text-zinc-400">الوقت</label>
+                    <input
+                      type="time"
+                      value={editTime}
+                      onChange={e => setEditTime(e.target.value)}
                       className="w-full bg-zinc-800 border-none rounded-xl p-2.5 text-xs text-white placeholder-zinc-600 focus:ring-1 focus:ring-blue-500 [color-scheme:dark]"
                     />
                   </div>
