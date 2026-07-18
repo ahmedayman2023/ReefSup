@@ -1409,6 +1409,25 @@ export default function App() {
     }
   };
 
+  const downloadSelectedPhotos = () => {
+    const selectedPhotos = photos.filter((p: PhotoItem) => multiSelectedIds.includes(p.id));
+    if (selectedPhotos.length === 0) return;
+
+    selectedPhotos.forEach((p: PhotoItem, i: number) => {
+      setTimeout(() => {
+        const link = document.createElement('a');
+        link.href = p.imageUrl;
+        link.download = `ReefSup_Photo_${p.id}.jpg`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }, i * 300);
+    });
+
+    setSuccessMessage(selectedPhotos.length === 1 ? "تم تنزيل الصورة ✨" : `جاري تنزيل ${selectedPhotos.length} صور...`);
+    setTimeout(() => setSuccessMessage(null), 3000);
+  };
+
   const handleLogin = async () => {
     console.log("Login button clicked");
     setIsLoggingIn(true);
@@ -2270,20 +2289,35 @@ export default function App() {
               </div>
             </div>
 
-            {/* Floating Action Button for Share */}
+            {/* Floating Action Buttons for Share & Download */}
             <AnimatePresence>
               {multiSelectedIds.length > 0 && (
-                <motion.button 
-                  initial={{ scale: 0, opacity: 0 }}
-                  animate={{ scale: 1, opacity: 1 }}
-                  exit={{ scale: 0, opacity: 0 }}
-                  whileHover={{ scale: 1.05 }}
-                  whileTap={{ scale: 0.95 }}
-                  onClick={sharePhotos}
-                  className="fixed bottom-6 right-6 w-16 h-16 bg-green-600 rounded-full flex items-center justify-center shadow-2xl shadow-green-600/40 z-50"
-                >
-                  <Share2 className="w-8 h-8 text-white" />
-                </motion.button>
+                <div className="fixed bottom-6 right-6 flex flex-col gap-3 z-50">
+                  <motion.button
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0, opacity: 0 }}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={downloadSelectedPhotos}
+                    title="تنزيل الصور المحددة"
+                    className="w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center shadow-2xl shadow-blue-600/40 cursor-pointer"
+                  >
+                    <Download className="w-8 h-8 text-white" />
+                  </motion.button>
+                  <motion.button
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0, opacity: 0 }}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={sharePhotos}
+                    title="مشاركة الصور المحددة"
+                    className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center shadow-2xl shadow-green-600/40 cursor-pointer"
+                  >
+                    <Share2 className="w-8 h-8 text-white" />
+                  </motion.button>
+                </div>
               )}
             </AnimatePresence>
 
