@@ -41,6 +41,12 @@ interface PhotoItem {
   createdAt: any;
 }
 
+interface UploadedImage {
+  id: string;
+  src: string;
+  name: string;
+}
+
 type ViewMode = 'camera' | 'folders' | 'gallery' | 'upload';
 
 const getPhotoDate = (p: PhotoItem): Date => {
@@ -88,9 +94,9 @@ export default function App() {
   const [folderToDelete, setFolderToDelete] = useState<string | null>(null);
 
   // Upload State
-  const [uploadedImageSrc, setUploadedImageSrc] = useState<string | null>(null);
-  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
   const [isMerging, setIsMerging] = useState(false);
+  const [mergeProgress, setMergeProgress] = useState<{ done: number; total: number } | null>(null);
   const [isDraggingFile, setIsDraggingFile] = useState(false);
   const [uploadMapsUrl, setUploadMapsUrl] = useState('');
   const [isImportingUploadLocation, setIsImportingUploadLocation] = useState(false);
@@ -920,62 +926,63 @@ export default function App() {
     }
   }, [user, capturedImage, location, selectedFolder]);
 
-  const handleImageFile = (file: File | undefined | null) => {
-    if (!file) return;
+  const handleImageFiles = (fileList: FileList | null | undefined) => {
+    if (!fileList || fileList.length === 0) return;
 
-    if (!file.type.startsWith('image/')) {
-      setError("الملف المختار ليس صورة صالحة");
-      return;
-    }
+    Array.from(fileList).forEach(file => {
+      if (!file.type.startsWith('image/')) {
+        setError(`"${file.name}" ليس صورة صالحة وتم تجاهلها`);
+        setTimeout(() => setError(null), 4000);
+        return;
+      }
 
-    const reader = new FileReader();
-    reader.onerror = () => {
-      setError("تعذر قراءة الصورة المختارة، حاول مرة أخرى");
-    };
-    reader.onload = (event) => {
-      setUploadedImageSrc(event.target?.result as string);
-      setUploadedFileName(file.name);
-    };
-    reader.readAsDataURL(file);
+      const reader = new FileReader();
+      reader.onerror = () => {
+        setError(`تعذر قراءة "${file.name}"، حاول مرة أخرى`);
+        setTimeout(() => setError(null), 4000);
+      };
+      reader.onload = (event) => {
+        const src = event.target?.result as string;
+        setUploadedImages((prev: UploadedImage[]) => [...prev, { id: `${Date.now()}_${Math.random().toString(36).slice(2, 8)}`, src, name: file.name }]);
+      };
+      reader.readAsDataURL(file);
+    });
   };
 
   const handleImageFileChange = (e: any) => {
-    handleImageFile(e.target.files?.[0]);
+    handleImageFiles(e.target.files);
     e.target.value = '';
   };
 
   const handleImageDrop = (e: any) => {
     e.preventDefault();
     setIsDraggingFile(false);
-    handleImageFile(e.dataTransfer.files?.[0]);
+    handleImageFiles(e.dataTransfer.files);
   };
 
-  const mergeLocation = async () => {
-    if (!uploadedImageSrc || !location) {
-      setError("يرجى التأكد من اختيار صورة وتحديد الموقع أولاً");
-      return;
-    }
-    
-    setIsMerging(true);
-    try {
+  const removeUploadedImage = (id: string) => {
+    setUploadedImages((prev: UploadedImage[]) => prev.filter(img => img.id !== id));
+  };
+
+  // Draws the location/map stamp onto a single image and resolves with the merged JPEG data URL
+  const mergeLocationOntoImage = (imageSrc: string, loc: LocationData): Promise<string> => {
+    return new Promise((resolve, reject) => {
       const img = new Image();
       img.crossOrigin = "anonymous";
-      
-      img.onload = async () => {
-        const canvas = canvasRef.current || document.createElement('canvas');
+
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         if (!ctx) {
-          setIsMerging(false);
+          reject(new Error('no canvas context'));
           return;
         }
 
-        // Use dimensions of the uploaded image
         canvas.width = img.width;
         canvas.height = img.height;
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-        // Load static map
-        const mapUrl = `https://static-maps.yandex.ru/1.x/?lang=en_US&ll=${location.longitude},${location.latitude}&z=16&l=map&size=300,300`;
+        const mapUrl = `https://static-maps.yandex.ru/1.x/?lang=en_US&ll=${loc.longitude},${loc.latitude}&z=16&l=map&size=300,300`;
         const mapImg = new Image();
         mapImg.crossOrigin = "anonymous";
 
@@ -995,7 +1002,7 @@ export default function App() {
           const overlayHeight = canvas.height * 0.28;
           const margin = canvas.width * 0.03;
           const padding = canvas.width * 0.025;
-          
+
           const bgX = margin;
           const bgY = canvas.height - overlayHeight - margin;
           const bgWidth = canvas.width - (margin * 2);
@@ -1025,10 +1032,10 @@ export default function App() {
             ctx.roundRect(mapX, mapY, mapSize, mapSize, 15);
             ctx.clip();
           }
-          
+
           if (mapImg.complete && mapImg.naturalWidth !== 0) {
             ctx.drawImage(mapImg, mapX, mapY, mapSize, mapSize);
-            
+
             ctx.fillStyle = '#ef4444';
             ctx.beginPath();
             ctx.arc(mapX + mapSize / 2, mapY + mapSize / 2, 6, 0, Math.PI * 2);
@@ -1049,22 +1056,22 @@ export default function App() {
           // Text Content
           const textX = mapX + mapSize + padding;
           let textY = mapY + (canvas.width * 0.04);
-          
+
           ctx.fillStyle = 'white';
           const titleSize = Math.max(16, canvas.width * 0.032);
           ctx.font = `bold ${titleSize}px sans-serif`;
-          
-          const locationTitle = `${location.city || 'Dammam'}, ${location.country || 'Saudi Arabia'}`;
+
+          const locationTitle = `${loc.city || 'Dammam'}, ${loc.country || 'Saudi Arabia'}`;
           ctx.fillText(locationTitle, textX, textY);
-          
+
           textY += titleSize + 8;
           const bodySize = Math.max(11, canvas.width * 0.02);
           ctx.font = `${bodySize}px sans-serif`;
           const maxWidth = bgWidth - (textX - bgX) - padding;
-          const words = (location.address || "").split(' ');
+          const words = (loc.address || "").split(' ');
           let line = '';
           const lineHeight = bodySize + 4;
-          
+
           for (let n = 0; n < words.length; n++) {
             const testLine = line + words[n] + ' ';
             if (ctx.measureText(testLine).width > maxWidth && n > 0) {
@@ -1076,45 +1083,68 @@ export default function App() {
             }
           }
           ctx.fillText(line, textX, textY);
-          
+
           textY += lineHeight + 6;
           ctx.font = `500 ${bodySize}px sans-serif`;
-          ctx.fillText(`Lat ${location.latitude.toFixed(6)}° Long ${location.longitude.toFixed(6)}°`, textX, textY);
-          
+          ctx.fillText(`Lat ${loc.latitude.toFixed(6)}° Long ${loc.longitude.toFixed(6)}°`, textX, textY);
+
           textY += lineHeight + 4;
           ctx.font = `${bodySize - 1}px sans-serif`;
           ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-          ctx.fillText(location.timestamp, textX, textY);
+          ctx.fillText(loc.timestamp, textX, textY);
 
-          const dataUrl = canvas.toDataURL('image/jpeg', 0.7);
-          
-          setCapturedImage(dataUrl);
-          setIsMerging(false);
-          
-          if (selectedFolder) {
-            saveToFirebase(dataUrl, true);
-          }
+          resolve(canvas.toDataURL('image/jpeg', 0.7));
         };
 
-        mapImg.onload = () => {
-          finalizeMerge();
-        };
-        mapImg.onerror = () => {
-          finalizeMerge();
-        };
+        mapImg.onload = () => finalizeMerge();
+        mapImg.onerror = () => finalizeMerge();
         mapImg.src = mapUrl;
       };
 
-      img.onerror = () => {
-        setIsMerging(false);
-        setError("فشل تحميل الصورة المحددة");
-      };
+      img.onerror = () => reject(new Error('failed to load image'));
+      img.src = imageSrc;
+    });
+  };
 
-      img.src = uploadedImageSrc;
-    } catch (err) {
-      console.error("Error merging:", err);
-      setIsMerging(false);
-      setError("حدث خطأ أثناء دمج الموقع بالصورة");
+  const mergeLocation = async () => {
+    if (uploadedImages.length === 0 || !location) {
+      setError("يرجى التأكد من اختيار صورة وتحديد الموقع أولاً");
+      return;
+    }
+    if (!selectedFolder) {
+      setError("يرجى تحديد المجلد الذي تود حفظ الصور فيه أولاً");
+      setTimeout(() => setError(null), 4000);
+      return;
+    }
+
+    setIsMerging(true);
+    setMergeProgress({ done: 0, total: uploadedImages.length });
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (let i = 0; i < uploadedImages.length; i++) {
+      try {
+        const dataUrl = await mergeLocationOntoImage(uploadedImages[i].src, location);
+        await saveToFirebase(dataUrl, true);
+        successCount++;
+      } catch (err) {
+        console.error(`Error merging "${uploadedImages[i].name}":`, err);
+        failCount++;
+      }
+      setMergeProgress({ done: i + 1, total: uploadedImages.length });
+    }
+
+    setIsMerging(false);
+    setMergeProgress(null);
+    setUploadedImages([]);
+
+    if (failCount === 0) {
+      setSuccessMessage(successCount === 1 ? "تم دمج وحفظ الصورة بنجاح ✨" : `تم دمج وحفظ ${successCount} صور بنجاح ✨`);
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } else {
+      setError(`تم حفظ ${successCount} صورة، وفشل دمج ${failCount} صورة`);
+      setTimeout(() => setError(null), 5000);
     }
   };
 
@@ -1545,7 +1575,7 @@ export default function App() {
 
           {/* Go to Folders Button */}
           <button
-            onClick={() => { setView('folders'); setUploadedImageSrc(null); }}
+            onClick={() => { setView('folders'); setUploadedImages([]); }}
             className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all duration-300 text-xs font-bold cursor-pointer shadow-lg ${
               view === 'folders' 
                 ? 'bg-blue-600 text-white border-blue-500 shadow-blue-600/20' 
@@ -1561,7 +1591,7 @@ export default function App() {
         <div className="flex items-center gap-2">
           {/* Camera Button */}
           <button 
-            onClick={() => { setView('camera'); setUploadedImageSrc(null); }}
+            onClick={() => { setView('camera'); setUploadedImages([]); }}
             className={`p-2 backdrop-blur-md rounded-full transition-colors border border-white/10 ${view === 'camera' ? 'bg-blue-600 text-white border-blue-500' : 'bg-black/40 text-zinc-400 hover:bg-zinc-800'}`}
             title="الكاميرا"
           >
@@ -1570,7 +1600,7 @@ export default function App() {
           
           {/* Upload Button */}
           <button 
-            onClick={() => { setView('upload'); setUploadedImageSrc(null); }}
+            onClick={() => { setView('upload'); setUploadedImages([]); }}
             className={`p-2 backdrop-blur-md rounded-full transition-colors border border-white/10 ${view === 'upload' ? 'bg-blue-600 text-white border-blue-500' : 'bg-black/40 text-zinc-400 hover:bg-zinc-800'}`}
             title="دمج موقع وصورة"
           >
@@ -1579,7 +1609,7 @@ export default function App() {
 
           {/* Folders Button */}
           <button 
-            onClick={() => { setView('folders'); setUploadedImageSrc(null); }}
+            onClick={() => { setView('folders'); setUploadedImages([]); }}
             className={`p-2 backdrop-blur-md rounded-full transition-colors border border-white/10 ${view === 'folders' ? 'bg-blue-600 text-white border-blue-500' : 'bg-black/40 text-zinc-400 hover:bg-zinc-800'}`}
             title="المجلدات"
           >
@@ -1951,7 +1981,7 @@ export default function App() {
               )}
 
               <AnimatePresence mode="wait">
-                {!uploadedImageSrc ? (
+                {uploadedImages.length === 0 ? (
                   /* File Upload Dropzone */
                   <motion.div
                     key="dropzone"
@@ -1968,6 +1998,7 @@ export default function App() {
                     <input
                       type="file"
                       accept="image/*"
+                      multiple
                       onChange={handleImageFileChange}
                       className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                     />
@@ -1976,8 +2007,8 @@ export default function App() {
                         <ImageIcon className="w-8 h-8" />
                       </div>
                       <div>
-                        <h3 className="font-bold text-lg mb-1">{isDraggingFile ? 'أفلت الصورة هنا' : 'اختر صورة أو اسحبها هنا'}</h3>
-                        <p className="text-xs text-zinc-500">يدعم صيغ JPG، PNG، WEBP وغيرها</p>
+                        <h3 className="font-bold text-lg mb-1">{isDraggingFile ? 'أفلت الصور هنا' : 'اختر صورة أو أكثر أو اسحبها هنا'}</h3>
+                        <p className="text-xs text-zinc-500">يدعم صيغ JPG، PNG، WEBP وغيرها — يمكنك اختيار عدة صور دفعة واحدة</p>
                       </div>
                     </div>
                   </motion.div>
@@ -1990,25 +2021,52 @@ export default function App() {
                     transition={{ duration: 0.25 }}
                     className="space-y-5"
                   >
-                    {/* Image Preview Container */}
-                    <div className="relative rounded-3xl overflow-hidden border border-white/5 bg-zinc-900 aspect-video flex items-center justify-center">
-                      <img
-                        src={uploadedImageSrc}
-                        alt="Uploaded preview"
-                        className="max-w-full max-h-full object-contain"
-                      />
-                      {uploadedFileName && (
-                        <div className="absolute bottom-3 right-3 max-w-[70%] px-3 py-1.5 bg-black/60 backdrop-blur-md rounded-full border border-white/10 text-[11px] text-zinc-300 truncate">
-                          {uploadedFileName}
-                        </div>
-                      )}
-                      <button
-                        onClick={() => { setUploadedImageSrc(null); setUploadedFileName(null); }}
-                        className="absolute top-4 right-4 p-2 bg-black/60 backdrop-blur-md rounded-full text-zinc-400 hover:text-white transition-colors border border-white/10 cursor-pointer"
-                        title="إزالة الصورة"
-                      >
-                        <X className="w-5 h-5" />
-                      </button>
+                    {/* Selected Images Grid */}
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs font-bold text-zinc-400">{uploadedImages.length} صورة محددة</p>
+                        <button
+                          onClick={() => setUploadedImages([])}
+                          disabled={isMerging}
+                          className="text-xs text-red-400 font-bold hover:underline cursor-pointer disabled:opacity-50"
+                        >
+                          مسح الكل
+                        </button>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {uploadedImages.map((image, idx) => (
+                          <div key={image.id} className="relative aspect-square rounded-2xl overflow-hidden border border-white/5 bg-zinc-900">
+                            <img src={image.src} alt={image.name} className="w-full h-full object-cover" />
+                            {isMerging && mergeProgress && idx < mergeProgress.done && (
+                              <div className="absolute inset-0 bg-black/60 flex items-center justify-center">
+                                <Check className="w-6 h-6 text-green-400" />
+                              </div>
+                            )}
+                            {!isMerging && (
+                              <button
+                                onClick={() => removeUploadedImage(image.id)}
+                                className="absolute top-1.5 right-1.5 p-1.5 bg-black/60 backdrop-blur-md rounded-full text-zinc-300 hover:text-white transition-colors border border-white/10 cursor-pointer"
+                                title="إزالة الصورة"
+                              >
+                                <X className="w-3.5 h-3.5" />
+                              </button>
+                            )}
+                          </div>
+                        ))}
+                        {!isMerging && (
+                          <label className="relative aspect-square rounded-2xl border-2 border-dashed border-zinc-800 hover:border-blue-500/40 flex flex-col items-center justify-center gap-1 text-zinc-500 hover:text-blue-400 cursor-pointer transition-colors">
+                            <input
+                              type="file"
+                              accept="image/*"
+                              multiple
+                              onChange={handleImageFileChange}
+                              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                            />
+                            <ImageIcon className="w-5 h-5 pointer-events-none" />
+                            <span className="text-[10px] font-bold pointer-events-none">إضافة</span>
+                          </label>
+                        )}
+                      </div>
                     </div>
 
                     {/* Google Maps Link Import */}
@@ -2087,24 +2145,21 @@ export default function App() {
                       whileHover={{ scale: 1.02 }}
                       whileTap={{ scale: 0.98 }}
                       onClick={mergeLocation}
-                      disabled={isMerging || !location}
+                      disabled={isMerging || !location || !selectedFolder}
                       className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold shadow-xl shadow-blue-600/20 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-3 text-lg cursor-pointer"
                     >
                       {isMerging ? (
                         <>
                           <RefreshCw className="w-6 h-6 animate-spin" />
-                          جاري دمج الموقع والتوليد...
+                          {mergeProgress ? `جاري الحفظ... (${mergeProgress.done} من ${mergeProgress.total})` : 'جاري دمج الموقع والتوليد...'}
                         </>
                       ) : (
                         <>
                           <FolderSync className="w-6 h-6" />
-                          دمج الموقع وحفظ الصورة
+                          {uploadedImages.length > 1 ? `دمج الموقع وحفظ ${uploadedImages.length} صور` : 'دمج الموقع وحفظ الصورة'}
                         </>
                       )}
                     </motion.button>
-                    {!selectedFolder && (
-                      <p className="text-center text-[11px] text-zinc-500 -mt-2">سيتم إنشاء الصورة المدمجة كمعاينة فقط حتى تختار مجلدًا لحفظها</p>
-                    )}
                   </motion.div>
                 )}
               </AnimatePresence>
