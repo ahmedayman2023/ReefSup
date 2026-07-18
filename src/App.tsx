@@ -42,6 +42,27 @@ interface PhotoItem {
 
 type ViewMode = 'camera' | 'folders' | 'gallery' | 'upload';
 
+const getPhotoDate = (p: PhotoItem): Date => {
+  const c: any = p.createdAt;
+  if (c?.toDate) return c.toDate();
+  if (typeof c === 'string' || typeof c === 'number') return new Date(c);
+  if (c instanceof Date) return c;
+  return new Date(0);
+};
+
+const getPhotoDateLabel = (d: Date): string => {
+  const dayStart = new Date(d);
+  dayStart.setHours(0, 0, 0, 0);
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const yesterday = new Date(today);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  if (dayStart.getTime() === today.getTime()) return 'اليوم';
+  if (dayStart.getTime() === yesterday.getTime()) return 'أمس';
+  return d.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' });
+};
+
 export default function App() {
   // Auth State
   const [user, setUser] = useState<User | null>(null);
@@ -109,8 +130,25 @@ export default function App() {
   // Memoized filtered photos
   const filteredPhotos = useMemo(() => {
     if (!selectedFolder) return [];
-    return photos.filter(p => p.folderId === selectedFolder.id);
+    return photos
+      .filter(p => p.folderId === selectedFolder.id)
+      .sort((a, b) => getPhotoDate(b).getTime() - getPhotoDate(a).getTime());
   }, [photos, selectedFolder]);
+
+  // Photos grouped under date section headers (today / yesterday / full date)
+  const groupedPhotos = useMemo(() => {
+    const groups: { label: string; photos: PhotoItem[] }[] = [];
+    for (const p of filteredPhotos) {
+      const label = getPhotoDateLabel(getPhotoDate(p));
+      const lastGroup = groups[groups.length - 1];
+      if (lastGroup && lastGroup.label === label) {
+        lastGroup.photos.push(p);
+      } else {
+        groups.push({ label, photos: [p] });
+      }
+    }
+    return groups;
+  }, [filteredPhotos]);
 
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -1927,58 +1965,67 @@ export default function App() {
                 </motion.button>
               </div>
               
-              <motion.div 
-                layout
-                className="flex-1 p-2 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-1"
-              >
-                {filteredPhotos.map((p, i) => {
-                  const isSelected = multiSelectedIds.includes(p.id);
-                  return (
-                    <motion.div 
-                      key={p.id} 
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: i * 0.03 }}
-                      whileHover={{ scale: 1.05 }}
-                      whileTap={{ scale: 0.95 }}
-                      className={`aspect-square relative group overflow-hidden cursor-pointer transition-all ${isSelected ? 'scale-90 rounded-xl' : 'rounded-sm'}`} 
-                      onClick={() => {
-                        if (isSelectMode) {
-                          setMultiSelectedIds(prev => 
-                            prev.includes(p.id) ? prev.filter(id => id !== p.id) : [...prev, p.id]
-                          );
-                        } else {
-                          setSelectedPhoto(p);
-                        }
-                      }}
+              <div className="flex-1 flex flex-col">
+                {groupedPhotos.map((group) => (
+                  <div key={group.label}>
+                    <div className="px-4 py-2 sticky top-[57px] z-[5] bg-zinc-950/90 backdrop-blur-xl">
+                      <h3 className="text-xs font-bold text-zinc-400 tracking-wide">{group.label}</h3>
+                    </div>
+                    <motion.div
+                      layout
+                      className="p-2 grid grid-cols-3 sm:grid-cols-4 md:grid-cols-5 gap-1"
                     >
-                      <img 
-                        src={p.imageUrl} 
-                        className="w-full h-full object-cover" 
-                        loading="lazy"
-                        decoding="async"
-                      />
-                      
-                      {isSelectMode && (
-                        <div className="absolute inset-0 bg-blue-500/20 flex items-center justify-center">
-                          <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${isSelected ? 'bg-blue-500 border-blue-500' : 'bg-black/20 border-white'}`}>
-                            {isSelected && <Check className="w-4 h-4 text-white" />}
-                          </div>
-                        </div>
-                      )}
+                      {group.photos.map((p, i) => {
+                        const isSelected = multiSelectedIds.includes(p.id);
+                        return (
+                          <motion.div
+                            key={p.id}
+                            initial={{ opacity: 0, scale: 0.8 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: i * 0.03 }}
+                            whileHover={{ scale: 1.05 }}
+                            whileTap={{ scale: 0.95 }}
+                            className={`aspect-square relative group overflow-hidden cursor-pointer transition-all ${isSelected ? 'scale-90 rounded-xl' : 'rounded-sm'}`}
+                            onClick={() => {
+                              if (isSelectMode) {
+                                setMultiSelectedIds(prev =>
+                                  prev.includes(p.id) ? prev.filter(id => id !== p.id) : [...prev, p.id]
+                                );
+                              } else {
+                                setSelectedPhoto(p);
+                              }
+                            }}
+                          >
+                            <img
+                              src={p.imageUrl}
+                              className="w-full h-full object-cover"
+                              loading="lazy"
+                              decoding="async"
+                            />
 
-                      {!isSelectMode && (
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); deletePhoto(p.id); }}
-                          className="absolute top-1 right-1 p-1.5 bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                        >
-                          <Trash2 className="w-3 h-3 text-red-400" />
-                        </button>
-                      )}
+                            {isSelectMode && (
+                              <div className="absolute inset-0 bg-blue-500/20 flex items-center justify-center">
+                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${isSelected ? 'bg-blue-500 border-blue-500' : 'bg-black/20 border-white'}`}>
+                                  {isSelected && <Check className="w-4 h-4 text-white" />}
+                                </div>
+                              </div>
+                            )}
+
+                            {!isSelectMode && (
+                              <button
+                                onClick={(e) => { e.stopPropagation(); deletePhoto(p.id); }}
+                                className="absolute top-1 right-1 p-1.5 bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
+                              >
+                                <Trash2 className="w-3 h-3 text-red-400" />
+                              </button>
+                            )}
+                          </motion.div>
+                        );
+                      })}
                     </motion.div>
-                  );
-                })}
-              </motion.div>
+                  </div>
+                ))}
+              </div>
             </div>
 
             {/* Floating Action Button for Share */}
