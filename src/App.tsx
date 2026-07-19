@@ -1683,8 +1683,8 @@ export default function App() {
 
   return (
     <div className="h-[100dvh] w-full bg-black text-white flex flex-col font-sans selection:bg-blue-500/30 overflow-hidden relative">
-      <div className="fixed inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(37,99,235,0.08),transparent_70%)] pointer-events-none" />
-      <div className="fixed inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none" />
+      {view !== 'folders' && <div className="fixed inset-0 bg-[radial-gradient(circle_at_50%_50%,rgba(37,99,235,0.08),transparent_70%)] pointer-events-none" />}
+      {view !== 'folders' && <div className="fixed inset-0 bg-[linear-gradient(to_right,#80808012_1px,transparent_1px),linear-gradient(to_bottom,#80808012_1px,transparent_1px)] bg-[size:40px_40px] pointer-events-none" />}
       {/* Header */}
       <header className={`${view === 'camera' ? 'absolute' : 'relative bg-zinc-950 border-b border-white/5'} top-0 left-0 right-0 p-4 flex justify-between items-center bg-gradient-to-b from-black/80 to-transparent z-50`}>
         <div className="flex items-center gap-3">
