@@ -8,7 +8,7 @@ import { Camera, MapPin, RefreshCw, Download, X, Info, FolderPlus, Folder, Image
 import { motion, AnimatePresence } from 'motion/react';
 import {
   auth, db, googleProvider, signInWithPopup, signOut, onAuthStateChanged,
-  collection, addDoc, query, where, onSnapshot, serverTimestamp, doc, setDoc, updateDoc, deleteField, getDocs,
+  collection, addDoc, query, where, onSnapshot, serverTimestamp, doc, setDoc,
   User, OperationType, handleFirestoreError
 } from './firebase';
 
@@ -27,7 +27,6 @@ interface FolderItem {
   name: string;
   ownerId: string;
   createdAt: any;
-  coverImage?: string;
 }
 
 interface PhotoItem {
@@ -71,25 +70,6 @@ const getPhotoDateLabel = (d: Date): string => {
   return d.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' });
 };
 
-// Downscales an image data URL into a small compressed JPEG thumbnail (used for folder covers)
-const createThumbnail = (src: string, maxDim = 360, quality = 0.6): Promise<string> => {
-  return new Promise((resolve, reject) => {
-    const img = new Image();
-    img.onload = () => {
-      const scale = Math.min(1, maxDim / Math.max(img.width, img.height));
-      const canvas = document.createElement('canvas');
-      canvas.width = Math.max(1, Math.round(img.width * scale));
-      canvas.height = Math.max(1, Math.round(img.height * scale));
-      const ctx = canvas.getContext('2d');
-      if (!ctx) { reject(new Error('no canvas context')); return; }
-      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL('image/jpeg', quality));
-    };
-    img.onerror = () => reject(new Error('failed to load image'));
-    img.src = src;
-  });
-};
-
 export default function App() {
   // Auth State
   const [user, setUser] = useState<User | null>(null);
@@ -110,15 +90,6 @@ export default function App() {
   const [isRenamingFolder, setIsRenamingFolder] = useState(false);
   const [renamingFolder, setRenamingFolder] = useState<FolderItem | null>(null);
   const [renameFolderName, setRenameFolderName] = useState('');
-
-  // Folder Cover State
-  const [isCoverPickerOpen, setIsCoverPickerOpen] = useState(false);
-  const [coverPickerFolder, setCoverPickerFolder] = useState<FolderItem | null>(null);
-  const [coverPickerPhotos, setCoverPickerPhotos] = useState<PhotoItem[]>([]);
-  const [isCoverPickerLoadingPhotos, setIsCoverPickerLoadingPhotos] = useState(false);
-  const [isSavingCover, setIsSavingCover] = useState(false);
-  const coverBackfillAttemptedRef = useRef<Set<string>>(new Set());
-  const coverUploadInputRef = useRef<HTMLInputElement>(null);
 
   // Upload State
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
@@ -234,56 +205,6 @@ export default function App() {
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'folders'));
     return () => unsubscribe();
   }, [user, selectedFolder]);
-
-  // Auto-generate a folder cover from its earliest photo when one isn't set yet (runs on the folders page)
-  useEffect(() => {
-    if (view !== 'folders' || !user || folders.length === 0) return;
-
-    const candidates = folders.filter(f => !f.coverImage && !coverBackfillAttemptedRef.current.has(f.id));
-    if (candidates.length === 0) return;
-    candidates.forEach(f => coverBackfillAttemptedRef.current.add(f.id));
-
-    (async () => {
-      if (user.uid === 'guest_user') {
-        const storedPhotos = localStorage.getItem('guest_photos');
-        const allPhotos: PhotoItem[] = storedPhotos ? JSON.parse(storedPhotos) : [];
-        const storedFolders = localStorage.getItem('guest_folders');
-        let allFolders: FolderItem[] = storedFolders ? JSON.parse(storedFolders) : [];
-        let changed = false;
-        for (const f of candidates) {
-          const folderPhotos = allPhotos.filter(p => p.folderId === f.id);
-          if (folderPhotos.length === 0) continue;
-          const earliest = folderPhotos.reduce((a, b) => getPhotoDate(a).getTime() <= getPhotoDate(b).getTime() ? a : b);
-          try {
-            const thumb = await createThumbnail(earliest.imageUrl);
-            allFolders = allFolders.map(ff => ff.id === f.id ? { ...ff, coverImage: thumb } : ff);
-            changed = true;
-          } catch (err) {
-            console.error('Cover backfill failed for folder', f.id, err);
-          }
-        }
-        if (changed) {
-          localStorage.setItem('guest_folders', JSON.stringify(allFolders));
-          setFolders(allFolders);
-        }
-        return;
-      }
-
-      for (const f of candidates) {
-        try {
-          const q = query(collection(db, 'photos'), where('ownerId', '==', user.uid), where('folderId', '==', f.id));
-          const snap = await getDocs(q);
-          if (snap.empty) continue;
-          const folderPhotos = snap.docs.map(d => d.data() as PhotoItem);
-          const earliest = folderPhotos.reduce((a, b) => getPhotoDate(a).getTime() <= getPhotoDate(b).getTime() ? a : b);
-          const thumb = await createThumbnail(earliest.imageUrl);
-          await setDoc(doc(db, 'folders', f.id), { coverImage: thumb }, { merge: true });
-        } catch (err) {
-          console.error('Cover backfill failed for folder', f.id, err);
-        }
-      }
-    })();
-  }, [view, user, folders]);
 
   // Photos Listener
   useEffect(() => {
@@ -1338,108 +1259,6 @@ export default function App() {
     }
   };
 
-  const openCoverPicker = async (folder: FolderItem) => {
-    setCoverPickerFolder(folder);
-    setIsCoverPickerOpen(true);
-    setCoverPickerPhotos([]);
-    if (!user) return;
-    setIsCoverPickerLoadingPhotos(true);
-    try {
-      if (user.uid === 'guest_user') {
-        const storedPhotos = localStorage.getItem('guest_photos');
-        const allPhotos: PhotoItem[] = storedPhotos ? JSON.parse(storedPhotos) : [];
-        setCoverPickerPhotos(allPhotos.filter(p => p.folderId === folder.id));
-      } else {
-        const q = query(collection(db, 'photos'), where('ownerId', '==', user.uid), where('folderId', '==', folder.id));
-        const snap = await getDocs(q);
-        setCoverPickerPhotos(snap.docs.map(d => ({ id: d.id, ...d.data() } as PhotoItem)));
-      }
-    } catch (err) {
-      console.error('Failed to load folder photos for cover picker', err);
-    } finally {
-      setIsCoverPickerLoadingPhotos(false);
-    }
-  };
-
-  const closeCoverPicker = () => {
-    if (isSavingCover) return;
-    setIsCoverPickerOpen(false);
-    setCoverPickerFolder(null);
-    setCoverPickerPhotos([]);
-  };
-
-  const persistFolderCover = async (folder: FolderItem, coverImage: string | null) => {
-    setIsSavingCover(true);
-    try {
-      if (user?.uid === 'guest_user') {
-        const storedFolders = localStorage.getItem('guest_folders');
-        const allFolders: FolderItem[] = storedFolders ? JSON.parse(storedFolders) : [];
-        const updatedFolders = allFolders.map(f => {
-          if (f.id !== folder.id) return f;
-          const next: FolderItem = { ...f };
-          if (coverImage === null) delete next.coverImage;
-          else next.coverImage = coverImage;
-          return next;
-        });
-        localStorage.setItem('guest_folders', JSON.stringify(updatedFolders));
-        setFolders(updatedFolders);
-        if (selectedFolder?.id === folder.id) {
-          const next: FolderItem = { ...selectedFolder };
-          if (coverImage === null) delete next.coverImage;
-          else next.coverImage = coverImage;
-          setSelectedFolder(next);
-        }
-      } else {
-        if (coverImage === null) {
-          await updateDoc(doc(db, 'folders', folder.id), { coverImage: deleteField() });
-        } else {
-          await setDoc(doc(db, 'folders', folder.id), { coverImage }, { merge: true });
-        }
-      }
-      setSuccessMessage(coverImage === null ? "تم إعادة الغلاف التلقائي ✨" : "تم تحديث غلاف المجلد ✨");
-      setTimeout(() => setSuccessMessage(null), 3000);
-      setIsCoverPickerOpen(false);
-      setCoverPickerFolder(null);
-      setCoverPickerPhotos([]);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.UPDATE, 'folders');
-    } finally {
-      setIsSavingCover(false);
-    }
-  };
-
-  const handleCoverFileChange = (e: any) => {
-    const file = e.target.files?.[0];
-    e.target.value = '';
-    if (!file || !coverPickerFolder) return;
-    if (!file.type.startsWith('image/')) {
-      setError('يرجى اختيار ملف صورة صالح');
-      setTimeout(() => setError(null), 3000);
-      return;
-    }
-    const reader = new FileReader();
-    reader.onload = async (ev) => {
-      const src = ev.target?.result as string;
-      try {
-        const thumb = await createThumbnail(src);
-        await persistFolderCover(coverPickerFolder, thumb);
-      } catch (err) {
-        console.error('Failed to process cover image', err);
-      }
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handlePickExistingPhotoAsCover = async (photo: PhotoItem) => {
-    if (!coverPickerFolder) return;
-    try {
-      const thumb = await createThumbnail(photo.imageUrl);
-      await persistFolderCover(coverPickerFolder, thumb);
-    } catch (err) {
-      console.error('Failed to process cover image', err);
-    }
-  };
-
   const downloadPhoto = async (imageSrc?: string) => {
     const src = imageSrc || capturedImage;
     if (!src) return;
@@ -2033,15 +1852,8 @@ export default function App() {
                       animate={{ opacity: 1, y: 0 }}
                       transition={{ delay: i * 0.04, duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
                       whileHover={{ y: -3 }}
-                      className={`group relative flex flex-col rounded-3xl border transition-colors duration-300 overflow-hidden ${isSelected ? 'border-blue-500/60 shadow-xl shadow-blue-950/30' : 'border-white/5 hover:border-white/15 shadow-lg shadow-black/20'} ${f.coverImage ? 'bg-zinc-900' : (isSelected ? 'bg-gradient-to-br from-blue-600/15 via-zinc-900 to-zinc-900' : 'bg-zinc-900/50 hover:bg-zinc-900/80')}`}
+                      className={`group relative flex flex-col rounded-3xl border transition-colors duration-300 overflow-hidden ${isSelected ? 'border-blue-500/60 shadow-xl shadow-blue-950/30' : 'border-white/5 hover:border-white/15 shadow-lg shadow-black/20'} ${isSelected ? 'bg-gradient-to-br from-blue-600/15 via-zinc-900 to-zinc-900' : 'bg-zinc-900/50 hover:bg-zinc-900/80'}`}
                     >
-                      {f.coverImage && (
-                        <>
-                          <img src={f.coverImage} alt="" className="absolute inset-0 w-full h-full object-cover" />
-                          <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/40 to-black/10" />
-                        </>
-                      )}
-
                       {isSelected && (
                         <div className="absolute top-3.5 left-3.5 flex items-center gap-1 bg-blue-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-lg shadow-blue-500/30 z-10">
                           <Check className="w-3 h-3" strokeWidth={3} />
@@ -2050,13 +1862,6 @@ export default function App() {
                       )}
 
                       <div className="absolute top-3.5 right-3.5 flex items-center gap-1.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity z-10">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); openCoverPicker(f); }}
-                          className="p-2 text-zinc-300 hover:text-blue-400 bg-black/40 backdrop-blur-md rounded-full transition-colors cursor-pointer"
-                          title="تغيير غلاف المجلد"
-                        >
-                          <ImageIcon className="w-4 h-4" />
-                        </button>
                         <button
                           onClick={(e) => { e.stopPropagation(); handleOpenRenameFolder(f); }}
                           className="p-2 text-zinc-300 hover:text-blue-400 bg-black/40 backdrop-blur-md rounded-full transition-colors cursor-pointer"
@@ -2067,19 +1872,17 @@ export default function App() {
                       </div>
 
                       <div className="relative p-5 pt-16 flex flex-col flex-1">
-                        {!f.coverImage && (
-                          <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-4 transition-colors ${isSelected ? 'bg-blue-500/20 text-blue-400' : 'bg-zinc-800 text-zinc-400 group-hover:bg-zinc-750'}`}>
-                            <Folder className="w-7 h-7" />
-                          </div>
-                        )}
-                        <h3 className={`font-bold text-lg mb-1 truncate ${f.coverImage ? 'text-white drop-shadow-md' : ''}`}>{f.name}</h3>
-                        <p className={`text-xs mb-5 ${f.coverImage ? 'text-zinc-300 drop-shadow' : 'text-zinc-500'}`}>
+                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-4 transition-colors ${isSelected ? 'bg-blue-500/20 text-blue-400' : 'bg-zinc-800 text-zinc-400 group-hover:bg-zinc-750'}`}>
+                          <Folder className="w-7 h-7" />
+                        </div>
+                        <h3 className="font-bold text-lg mb-1 truncate">{f.name}</h3>
+                        <p className="text-xs mb-5 text-zinc-500">
                           {f.createdAt?.toDate
                             ? new Date(f.createdAt.toDate()).toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' })
                             : 'الآن'}
                         </p>
 
-                        <div className={`flex gap-2.5 mt-auto pt-4 border-t ${f.coverImage ? 'border-white/10' : 'border-white/5'}`}>
+                        <div className="flex gap-2.5 mt-auto pt-4 border-t border-white/5">
                           <motion.button
                             whileTap={{ scale: 0.95 }}
                             onClick={() => { setSelectedFolder(f); setView('camera'); }}
@@ -3073,106 +2876,6 @@ export default function App() {
           )}
         </AnimatePresence>
 
-        {/* Folder Cover Picker Modal */}
-        <input
-          ref={coverUploadInputRef}
-          type="file"
-          accept="image/*"
-          onChange={handleCoverFileChange}
-          className="hidden"
-        />
-        <AnimatePresence>
-          {isCoverPickerOpen && coverPickerFolder && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[60] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 text-right"
-              dir="rtl"
-            >
-              <motion.div
-                initial={{ scale: 0.95, y: 15 }}
-                animate={{ scale: 1, y: 0 }}
-                exit={{ scale: 0.95, y: 15 }}
-                className="bg-zinc-900 w-full max-w-md rounded-3xl p-6 border border-white/10 shadow-2xl flex flex-col gap-4 text-white max-h-[85vh]"
-              >
-                <div className="flex justify-between items-start shrink-0">
-                  <div className="min-w-0">
-                    <h3 className="text-xl font-bold flex items-center gap-2">
-                      <ImageIcon className="w-5 h-5 text-blue-400" />
-                      غلاف المجلد
-                    </h3>
-                    <p className="text-xs text-zinc-500 mt-1 truncate">اختر غلافًا لمجلد "{coverPickerFolder.name}"</p>
-                  </div>
-                  <button
-                    onClick={closeCoverPicker}
-                    disabled={isSavingCover}
-                    className="p-1.5 bg-zinc-800 hover:bg-zinc-750 rounded-full transition-colors text-zinc-400 hover:text-white cursor-pointer disabled:opacity-50 shrink-0"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-
-                <div className="flex flex-col gap-2.5 shrink-0">
-                  <button
-                    onClick={() => coverUploadInputRef.current?.click()}
-                    disabled={isSavingCover}
-                    className="flex items-center gap-3 p-3.5 bg-zinc-800/60 hover:bg-zinc-800 rounded-2xl transition-colors cursor-pointer disabled:opacity-50"
-                  >
-                    <div className="p-2 rounded-xl bg-blue-500/20 text-blue-400 shrink-0">
-                      <Upload className="w-4 h-4" />
-                    </div>
-                    <span className="text-sm font-bold">رفع صورة من الجهاز</span>
-                  </button>
-
-                  {coverPickerFolder.coverImage && (
-                    <button
-                      onClick={() => persistFolderCover(coverPickerFolder, null)}
-                      disabled={isSavingCover}
-                      className="flex items-center gap-3 p-3.5 bg-zinc-800/60 hover:bg-zinc-800 rounded-2xl transition-colors cursor-pointer disabled:opacity-50"
-                    >
-                      <div className="p-2 rounded-xl bg-zinc-700/50 text-zinc-300 shrink-0">
-                        <RefreshCw className="w-4 h-4" />
-                      </div>
-                      <span className="text-sm font-bold">استخدام أول صورة تلقائيًا</span>
-                    </button>
-                  )}
-                </div>
-
-                <div className="flex flex-col gap-2.5 min-h-0 overflow-y-auto">
-                  <label className="text-xs font-bold text-zinc-400 shrink-0">أو اختر من صور المجلد</label>
-                  {isCoverPickerLoadingPhotos ? (
-                    <div className="flex items-center justify-center py-8 text-zinc-500">
-                      <RefreshCw className="w-5 h-5 animate-spin" />
-                    </div>
-                  ) : coverPickerPhotos.length === 0 ? (
-                    <p className="text-xs text-zinc-600 text-center py-6">لا توجد صور في هذا المجلد بعد</p>
-                  ) : (
-                    <div className="grid grid-cols-4 gap-2">
-                      {coverPickerPhotos.map(p => (
-                        <button
-                          key={p.id}
-                          onClick={() => handlePickExistingPhotoAsCover(p)}
-                          disabled={isSavingCover}
-                          className="aspect-square rounded-xl overflow-hidden border border-white/5 hover:border-blue-500 transition-colors cursor-pointer disabled:opacity-50"
-                        >
-                          <img src={p.imageUrl} className="w-full h-full object-cover" loading="lazy" />
-                        </button>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {isSavingCover && (
-                  <div className="flex items-center justify-center gap-2 text-xs text-blue-400 shrink-0">
-                    <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-                    جاري الحفظ...
-                  </div>
-                )}
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
       </main>
 
       {/* Error Toast */}
