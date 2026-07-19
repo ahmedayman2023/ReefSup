@@ -4,12 +4,12 @@
  */
 
 import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
-import { Camera, MapPin, RefreshCw, Download, X, Info, FolderPlus, Folder, Image as ImageIcon, LogOut, LogIn, ChevronLeft, Trash2, Save, ArrowLeft, Check, Share2, FolderSync, ZoomIn, ZoomOut, Database, Upload, User as UserIcon, Edit2, Search } from 'lucide-react';
+import { Camera, MapPin, RefreshCw, Download, X, Info, FolderPlus, Folder, Image as ImageIcon, LogOut, LogIn, ChevronLeft, Save, ArrowLeft, Check, Share2, FolderSync, ZoomIn, ZoomOut, Database, Upload, User as UserIcon, Edit2, Search } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { 
-  auth, db, googleProvider, signInWithPopup, signOut, onAuthStateChanged, 
-  collection, addDoc, query, where, onSnapshot, serverTimestamp, deleteDoc, doc, setDoc, getDocs,
-  User, OperationType, handleFirestoreError 
+import {
+  auth, db, googleProvider, signInWithPopup, signOut, onAuthStateChanged,
+  collection, addDoc, query, where, onSnapshot, serverTimestamp, doc, setDoc,
+  User, OperationType, handleFirestoreError
 } from './firebase';
 
 interface LocationData {
@@ -88,10 +88,6 @@ export default function App() {
   const [isRenamingFolder, setIsRenamingFolder] = useState(false);
   const [renamingFolder, setRenamingFolder] = useState<FolderItem | null>(null);
   const [renameFolderName, setRenameFolderName] = useState('');
-
-  // Delete Folder State
-  const [isDeletingFolder, setIsDeletingFolder] = useState(false);
-  const [folderToDelete, setFolderToDelete] = useState<string | null>(null);
 
   // Upload State
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
@@ -1261,81 +1257,6 @@ export default function App() {
     }
   };
 
-  const deleteFolder = (id: string) => {
-    setFolderToDelete(id);
-    setIsDeletingFolder(true);
-  };
-
-  const confirmDeleteFolder = async () => {
-    if (!user || !folderToDelete) return;
-    const id = folderToDelete;
-    try {
-      if (user.uid === 'guest_user') {
-        const storedFolders = localStorage.getItem('guest_folders');
-        const allFolders = storedFolders ? JSON.parse(storedFolders) : [];
-        const updatedFolders = allFolders.filter((f: FolderItem) => f.id !== id);
-        localStorage.setItem('guest_folders', JSON.stringify(updatedFolders));
-        setFolders(updatedFolders);
-
-        // Delete photos inside the folder too
-        const storedPhotos = localStorage.getItem('guest_photos');
-        const allPhotos: PhotoItem[] = storedPhotos ? JSON.parse(storedPhotos) : [];
-        const updatedPhotos = allPhotos.filter((p: PhotoItem) => p.folderId !== id);
-        localStorage.setItem('guest_photos', JSON.stringify(updatedPhotos));
-        
-        if (selectedFolder?.id === id) {
-          setSelectedFolder(updatedFolders[0] || null);
-        }
-        setIsDeletingFolder(false);
-        setFolderToDelete(null);
-        setSuccessMessage("تم حذف المجلد وجميع الصور بداخله بنجاح 🗑️");
-        setTimeout(() => setSuccessMessage(null), 3000);
-        return;
-      }
-
-      // Delete folder itself
-      await deleteDoc(doc(db, 'folders', id));
-
-      // Query and delete photos inside this folder in Firebase
-      const q = query(
-        collection(db, 'photos'), 
-        where('ownerId', '==', user.uid),
-        where('folderId', '==', id)
-      );
-      const snapshot = await getDocs(q);
-      const deletePromises = snapshot.docs.map(docRef => deleteDoc(docRef.ref));
-      await Promise.all(deletePromises);
-
-      // Select another folder if the deleted folder was selected
-      if (selectedFolder?.id === id) {
-        const remainingFolders = folders.filter(f => f.id !== id);
-        setSelectedFolder(remainingFolders[0] || null);
-      }
-
-      setIsDeletingFolder(false);
-      setFolderToDelete(null);
-      setSuccessMessage("تم حذف المجلد وجميع الصور بداخله بنجاح 🗑️");
-      setTimeout(() => setSuccessMessage(null), 3000);
-    } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, 'folders');
-    }
-  };
-
-  const deletePhoto = async (id: string) => {
-    try {
-      if (user?.uid === 'guest_user') {
-        const storedPhotos = localStorage.getItem('guest_photos');
-        const allPhotos: PhotoItem[] = storedPhotos ? JSON.parse(storedPhotos) : [];
-        const updatedPhotos = allPhotos.filter((p: PhotoItem) => p.id !== id);
-        localStorage.setItem('guest_photos', JSON.stringify(updatedPhotos));
-        setPhotos(updatedPhotos.filter(p => p.folderId === selectedFolder?.id));
-        return;
-      }
-      await deleteDoc(doc(db, 'photos', id));
-    } catch (err) {
-      handleFirestoreError(err, OperationType.DELETE, 'photos');
-    }
-  };
 
   const downloadPhoto = async (imageSrc?: string) => {
     const src = imageSrc || capturedImage;
@@ -1872,19 +1793,12 @@ export default function App() {
                         <Folder className="w-6 h-6" />
                       </div>
                       <div className="flex gap-2">
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); handleOpenRenameFolder(f); }} 
+                        <button
+                          onClick={(e) => { e.stopPropagation(); handleOpenRenameFolder(f); }}
                           className="p-2 text-zinc-600 hover:text-blue-400 bg-black/20 rounded-full transition-colors"
                           title="تعديل اسم المجلد"
                         >
                           <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button 
-                          onClick={(e) => { e.stopPropagation(); deleteFolder(f.id); }} 
-                          className="p-2 text-zinc-600 hover:text-red-400 bg-black/20 rounded-full transition-colors"
-                          title="حذف المجلد"
-                        >
-                          <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
                     </div>
@@ -2271,15 +2185,6 @@ export default function App() {
                                 </div>
                               </div>
                             )}
-
-                            {!isSelectMode && (
-                              <button
-                                onClick={(e) => { e.stopPropagation(); deletePhoto(p.id); }}
-                                className="absolute top-1 right-1 p-1.5 bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
-                              >
-                                <Trash2 className="w-3 h-3 text-red-400" />
-                              </button>
-                            )}
                           </motion.div>
                         );
                       })}
@@ -2393,18 +2298,6 @@ export default function App() {
                       >
                         <Share2 className="w-5 h-5" />
                         مشاركة
-                      </motion.button>
-                      <motion.button 
-                        whileHover={{ scale: 1.02 }}
-                        whileTap={{ scale: 0.98 }}
-                        onClick={() => {
-                          deletePhoto(selectedPhoto.id);
-                          setSelectedPhoto(null);
-                        }}
-                        className="flex-1 bg-red-500/10 text-red-500 py-4 rounded-2xl font-bold flex items-center justify-center gap-3 border border-red-500/20"
-                      >
-                        <Trash2 className="w-5 h-5" />
-                        حذف
                       </motion.button>
                     </div>
                   </div>
@@ -2879,68 +2772,6 @@ export default function App() {
                     className="flex-1 bg-blue-600 hover:bg-blue-500 rounded-xl py-3.5 font-bold text-sm text-white shadow-lg shadow-blue-600/20 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50"
                   >
                     تطبيق التعديل
-                  </button>
-                </div>
-              </motion.div>
-            </motion.div>
-          )}
-        </AnimatePresence>
-
-        {/* Delete Folder Modal */}
-        <AnimatePresence>
-          {isDeletingFolder && (
-            <motion.div 
-              initial={{ opacity: 0 }} 
-              animate={{ opacity: 1 }} 
-              exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[60] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 text-right"
-              dir="rtl"
-            >
-              <motion.div
-                initial={{ scale: 0.95, y: 15 }}
-                animate={{ scale: 1, y: 0 }}
-                exit={{ scale: 0.95, y: 15 }}
-                className="bg-zinc-900 w-full max-w-md rounded-3xl p-6 border border-white/10 shadow-2xl flex flex-col gap-4 text-white"
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h3 className="text-xl font-bold flex items-center gap-2">
-                      <Trash2 className="w-5 h-5 text-red-500" />
-                      تأكيد حذف المجلد
-                    </h3>
-                    <p className="text-xs text-zinc-500 mt-1">هل أنت متأكد من رغبتك في حذف هذا المجلد وجميع الصور الموجودة بداخله؟</p>
-                  </div>
-                  <button 
-                    onClick={() => {
-                      setIsDeletingFolder(false);
-                      setFolderToDelete(null);
-                    }}
-                    className="p-1.5 bg-zinc-800 hover:bg-zinc-750 rounded-full transition-colors text-zinc-400 hover:text-white cursor-pointer"
-                  >
-                    <X className="w-5 h-5" />
-                  </button>
-                </div>
-
-                <div className="p-4 bg-red-500/10 border border-red-500/20 rounded-2xl flex items-start gap-3 mt-2 text-red-400">
-                  <Info className="w-5 h-5 shrink-0 mt-0.5" />
-                  <p className="text-xs leading-relaxed">تنبيه: هذا الإجراء لا يمكن التراجع عنه. سيتم حذف جميع الصور التي تم التقاطها وحفظها في هذا المجلد نهائياً.</p>
-                </div>
-
-                <div className="flex gap-3 pt-2">
-                  <button 
-                    onClick={() => {
-                      setIsDeletingFolder(false);
-                      setFolderToDelete(null);
-                    }} 
-                    className="flex-1 py-3.5 bg-zinc-800 hover:bg-zinc-750 rounded-xl text-zinc-400 font-bold text-sm transition-colors cursor-pointer border border-white/5"
-                  >
-                    إلغاء
-                  </button>
-                  <button 
-                    onClick={confirmDeleteFolder} 
-                    className="flex-1 bg-red-600 hover:bg-red-500 rounded-xl py-3.5 font-bold text-sm text-white shadow-lg shadow-red-600/20 active:scale-[0.98] transition-all cursor-pointer"
-                  >
-                    نعم، حذف المجلد
                   </button>
                 </div>
               </motion.div>
