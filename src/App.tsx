@@ -83,6 +83,8 @@ export default function App() {
   const [selectedPhoto, setSelectedPhoto] = useState<PhotoItem | null>(null);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
+  const [isFoldersSearchOpen, setIsFoldersSearchOpen] = useState(false);
+  const [foldersSearchQuery, setFoldersSearchQuery] = useState('');
 
   // Rename Folder State
   const [isRenamingFolder, setIsRenamingFolder] = useState(false);
@@ -1777,23 +1779,71 @@ export default function App() {
                   </div>
                 </div>
                 {folders.length > 0 && (
-                  <motion.button
-                    whileHover={{ scale: 1.03 }}
-                    whileTap={{ scale: 0.97 }}
-                    onClick={() => setIsCreatingFolder(true)}
-                    className="hidden sm:flex items-center gap-2 bg-white text-black px-5 py-2.5 rounded-2xl font-bold text-sm shadow-xl shadow-white/5 hover:bg-zinc-200 transition-colors cursor-pointer shrink-0"
-                  >
-                    <FolderPlus className="w-4 h-4" />
-                    مجلد جديد
-                  </motion.button>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <motion.button
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.97 }}
+                      onClick={() => {
+                        setIsFoldersSearchOpen(prev => !prev);
+                        if (isFoldersSearchOpen) setFoldersSearchQuery('');
+                      }}
+                      className={`p-2.5 rounded-2xl border transition-colors cursor-pointer ${isFoldersSearchOpen ? 'bg-blue-600 text-white border-blue-500' : 'bg-zinc-900/60 text-zinc-400 border-white/5 hover:text-white hover:border-white/15'}`}
+                      title="بحث عن مجلد"
+                    >
+                      <Search className="w-4 h-4" />
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.03 }}
+                      whileTap={{ scale: 0.97 }}
+                      onClick={() => setIsCreatingFolder(true)}
+                      className="hidden sm:flex items-center gap-2 bg-white text-black px-5 py-2.5 rounded-2xl font-bold text-sm shadow-xl shadow-white/5 hover:bg-zinc-200 transition-colors cursor-pointer"
+                    >
+                      <FolderPlus className="w-4 h-4" />
+                      مجلد جديد
+                    </motion.button>
+                  </div>
                 )}
               </div>
+
+              <AnimatePresence>
+                {isFoldersSearchOpen && (
+                  <motion.div
+                    initial={{ opacity: 0, height: 0, marginBottom: 0 }}
+                    animate={{ opacity: 1, height: 'auto', marginBottom: 20 }}
+                    exit={{ opacity: 0, height: 0, marginBottom: 0 }}
+                    transition={{ duration: 0.25, ease: [0.22, 1, 0.36, 1] }}
+                    className="overflow-hidden"
+                  >
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-zinc-600 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        autoFocus
+                        placeholder="ابحث باسم المجلد..."
+                        value={foldersSearchQuery}
+                        onChange={e => setFoldersSearchQuery(e.target.value)}
+                        className="w-full bg-zinc-900/60 border border-white/5 rounded-2xl p-3.5 pr-11 pl-11 text-sm placeholder-zinc-600 text-white focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                      />
+                      {foldersSearchQuery && (
+                        <button
+                          onClick={() => setFoldersSearchQuery('')}
+                          className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-white transition-colors cursor-pointer"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      )}
+                    </div>
+                  </motion.div>
+                )}
+              </AnimatePresence>
 
               <motion.div
                 layout
                 className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
               >
-                {folders.map((f, i) => {
+                {folders
+                  .filter(f => f.name.toLowerCase().includes(foldersSearchQuery.trim().toLowerCase()))
+                  .map((f, i) => {
                   const isSelected = selectedFolder?.id === f.id;
                   return (
                     <motion.div
@@ -1875,6 +1925,18 @@ export default function App() {
                     <FolderPlus className="w-4 h-4" />
                     إنشاء أول مجلد
                   </motion.button>
+                </motion.div>
+              )}
+
+              {folders.length > 0 && foldersSearchQuery.trim() && folders.filter(f => f.name.toLowerCase().includes(foldersSearchQuery.trim().toLowerCase())).length === 0 && (
+                <motion.div
+                  initial={{ opacity: 0, y: 10 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  className="text-center py-20 px-6 bg-zinc-900/30 rounded-[2rem] border border-dashed border-white/10 mt-4"
+                >
+                  <Search className="w-10 h-10 mx-auto mb-4 text-zinc-700" />
+                  <h3 className="text-sm font-bold text-zinc-300 mb-1">لا توجد نتائج</h3>
+                  <p className="text-xs text-zinc-500">لا يوجد مجلد يطابق "{foldersSearchQuery.trim()}"</p>
                 </motion.div>
               )}
             </div>
