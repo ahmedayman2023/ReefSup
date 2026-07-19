@@ -1308,7 +1308,7 @@ export default function App() {
           await navigator.share({
             files,
             title: `صور من ${selectedFolder?.name}`,
-            text: `تمت مشاركة ${selectedPhotos.length} صورة من تطبيق ReefSup V1.0`,
+            text: `تمت مشاركة ${selectedPhotos.length} صورة من تطبيق ReefSupV1.1`,
           });
           return;
         }
@@ -1317,7 +1317,7 @@ export default function App() {
       if (navigator.share) {
         await navigator.share({
           title: `صور من ${selectedFolder?.name}`,
-          text: `تمت مشاركة ${selectedPhotos.length} صورة من تطبيق ReefSup V1.0`,
+          text: `تمت مشاركة ${selectedPhotos.length} صورة من تطبيق ReefSupV1.1`,
           url: window.location.href,
         });
       } else {
@@ -1405,7 +1405,7 @@ export default function App() {
           <MapPin className="w-12 h-12 text-white" />
         </motion.div>
         <div className="flex flex-col items-center gap-3">
-          <h1 className="text-4xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-b from-white to-white/40">ReefSup V1.0</h1>
+          <h1 className="text-4xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-b from-white to-white/40">ReefSupV1.1</h1>
           <div className="flex items-center gap-3 px-4 py-2 bg-white/5 backdrop-blur-md rounded-full border border-white/10">
             <RefreshCw className="w-3 h-3 animate-spin text-blue-400" />
             <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-zinc-500">Initializing Experience</span>
@@ -1429,7 +1429,7 @@ export default function App() {
           <div className="w-24 h-24 bg-blue-600/20 rounded-3xl flex items-center justify-center mb-8 border border-blue-500/30 shadow-2xl shadow-blue-900/20">
             <MapPin className="w-12 h-12 text-blue-400" />
           </div>
-          <h1 className="text-4xl font-bold mb-4 tracking-tight drop-shadow-md">ReefSup V1.0</h1>
+          <h1 className="text-4xl font-bold mb-4 tracking-tight drop-shadow-md">ReefSupV1.1</h1>
           <p className="text-zinc-400 text-center mb-10 leading-relaxed">
             قم بتسجيل الدخول لحفظ صورك ومجلداتك بأمان على السحابة والوصول إليها من أي مكان.
           </p>
@@ -1510,7 +1510,7 @@ export default function App() {
             <div className="bg-blue-600 p-1.5 rounded-lg shadow-lg shadow-blue-900/20">
               <MapPin className="w-5 h-5" />
             </div>
-            <h1 className="text-lg font-bold tracking-tight drop-shadow-md">ReefSup V1.0</h1>
+            <h1 className="text-lg font-bold tracking-tight drop-shadow-md">ReefSupV1.1</h1>
           </div>
 
           {/* Go to Folders Button */}
@@ -1761,86 +1761,118 @@ export default function App() {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.5, ease: [0.22, 1, 0.36, 1] }}
-            className="w-full relative flex flex-col bg-zinc-950 min-h-full pb-24"
+            className="w-full relative flex flex-col bg-zinc-950 min-h-full pb-28"
           >
-            <div className="flex-1 p-6">
-              <div className="flex items-center justify-between mb-8">
-                <div>
-                  <h2 className="text-3xl font-bold tracking-tight">المجلدات</h2>
-                  <p className="text-xs text-zinc-500 mt-1">نظم صورك في مجلدات مخصصة</p>
+            <div className="flex-1 p-6 max-w-6xl mx-auto w-full">
+              <div className="flex items-center justify-between mb-8 gap-4">
+                <div className="flex items-center gap-3.5 min-w-0">
+                  <div className="w-12 h-12 shrink-0 bg-gradient-to-br from-blue-600/25 to-blue-900/10 rounded-2xl flex items-center justify-center border border-blue-500/20 shadow-lg shadow-blue-900/10">
+                    <Folder className="w-6 h-6 text-blue-400" />
+                  </div>
+                  <div className="min-w-0">
+                    <h2 className="text-2xl sm:text-3xl font-bold tracking-tight truncate">المجلدات</h2>
+                    <p className="text-xs text-zinc-500 mt-1">
+                      {folders.length > 0 ? `${folders.length} ${folders.length === 1 ? 'مجلد' : 'مجلدات'} · نظّم صورك بسهولة` : 'نظم صورك في مجلدات مخصصة'}
+                    </p>
+                  </div>
                 </div>
+                {folders.length > 0 && (
+                  <motion.button
+                    whileHover={{ scale: 1.03 }}
+                    whileTap={{ scale: 0.97 }}
+                    onClick={() => setIsCreatingFolder(true)}
+                    className="hidden sm:flex items-center gap-2 bg-white text-black px-5 py-2.5 rounded-2xl font-bold text-sm shadow-xl shadow-white/5 hover:bg-zinc-200 transition-colors cursor-pointer shrink-0"
+                  >
+                    <FolderPlus className="w-4 h-4" />
+                    مجلد جديد
+                  </motion.button>
+                )}
               </div>
 
-              <motion.div 
+              <motion.div
                 layout
                 className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
               >
-                {folders.map((f, i) => (
-                  <motion.div 
-                    key={f.id}
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: i * 0.05 }}
-                    whileHover={{ scale: 1.02 }}
-                    whileTap={{ scale: 0.98 }}
-                    className={`p-5 rounded-3xl border transition-all relative overflow-hidden ${selectedFolder?.id === f.id ? 'bg-gradient-to-br from-blue-600/20 to-blue-900/20 border-blue-500 shadow-lg shadow-blue-500/10' : 'bg-zinc-900/50 border-white/5 hover:border-white/10'}`}
-                  >
-                    {selectedFolder?.id === f.id && (
-                      <div className="absolute top-0 right-0 w-16 h-16 bg-blue-500/10 rounded-bl-full pointer-events-none" />
-                    )}
-                    <div className="flex justify-between items-start mb-4">
-                      <div className={`p-3 rounded-2xl ${selectedFolder?.id === f.id ? 'bg-blue-500/20 text-blue-400' : 'bg-zinc-800 text-zinc-400'}`}>
-                        <Folder className="w-6 h-6" />
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={(e) => { e.stopPropagation(); handleOpenRenameFolder(f); }}
-                          className="p-2 text-zinc-600 hover:text-blue-400 bg-black/20 rounded-full transition-colors"
-                          title="تعديل اسم المجلد"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                      </div>
-                    </div>
-                    <h3 className="font-bold text-lg mb-1 truncate">{f.name}</h3>
-                    <p className="text-xs text-zinc-500 mb-4">
-                      {f.createdAt?.toDate ? new Date(f.createdAt.toDate()).toLocaleDateString('ar-EG') : 'الآن'}
-                    </p>
-                    <div className="flex gap-3 mt-auto">
-                      <motion.button 
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => { setSelectedFolder(f); setView('camera'); }}
-                        className={`flex-1 text-xs py-3 rounded-xl font-bold shadow-lg transition-colors ${selectedFolder?.id === f.id ? 'bg-blue-600 text-white shadow-blue-600/20' : 'bg-white text-black shadow-white/5 active:bg-zinc-200'}`}
+                {folders.map((f, i) => {
+                  const isSelected = selectedFolder?.id === f.id;
+                  return (
+                    <motion.div
+                      key={f.id}
+                      layout
+                      initial={{ opacity: 0, y: 14 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: i * 0.04, duration: 0.35, ease: [0.22, 1, 0.36, 1] }}
+                      whileHover={{ y: -3 }}
+                      className={`group relative flex flex-col rounded-3xl border transition-colors duration-300 overflow-hidden ${isSelected ? 'bg-gradient-to-br from-blue-600/15 via-zinc-900 to-zinc-900 border-blue-500/60 shadow-xl shadow-blue-950/30' : 'bg-zinc-900/50 border-white/5 hover:border-white/15 hover:bg-zinc-900/80 shadow-lg shadow-black/20'}`}
+                    >
+                      {isSelected && (
+                        <div className="absolute top-3.5 left-3.5 flex items-center gap-1 bg-blue-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full shadow-lg shadow-blue-500/30 z-10">
+                          <Check className="w-3 h-3" strokeWidth={3} />
+                          محدد الآن
+                        </div>
+                      )}
+                      <button
+                        onClick={(e) => { e.stopPropagation(); handleOpenRenameFolder(f); }}
+                        className="absolute top-3.5 right-3.5 p-2 text-zinc-500 hover:text-blue-400 bg-black/30 backdrop-blur-md rounded-full opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity z-10 cursor-pointer"
+                        title="تعديل اسم المجلد"
                       >
-                        {selectedFolder?.id === f.id ? 'محدد' : 'اختيار'}
-                      </motion.button>
-                      <motion.button 
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => { setSelectedFolder(f); setView('gallery'); }}
-                        className="flex-1 text-xs bg-zinc-800/80 backdrop-blur-md py-3 rounded-xl font-bold border border-white/5 hover:bg-zinc-700 transition-colors text-white"
-                      >
-                        عرض الصور
-                      </motion.button>
-                    </div>
-                  </motion.div>
-                ))}
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+
+                      <div className="p-5 pt-16 flex flex-col flex-1">
+                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-4 transition-colors ${isSelected ? 'bg-blue-500/20 text-blue-400' : 'bg-zinc-800 text-zinc-400 group-hover:bg-zinc-750'}`}>
+                          <Folder className="w-7 h-7" />
+                        </div>
+                        <h3 className="font-bold text-lg mb-1 truncate">{f.name}</h3>
+                        <p className="text-xs text-zinc-500 mb-5">
+                          {f.createdAt?.toDate
+                            ? new Date(f.createdAt.toDate()).toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' })
+                            : 'الآن'}
+                        </p>
+
+                        <div className="flex gap-2.5 mt-auto pt-4 border-t border-white/5">
+                          <motion.button
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => { setSelectedFolder(f); setView('camera'); }}
+                            className={`flex-1 flex items-center justify-center gap-1.5 text-xs py-3 rounded-xl font-bold transition-colors cursor-pointer ${isSelected ? 'bg-blue-600 text-white shadow-lg shadow-blue-600/20' : 'bg-white text-black hover:bg-zinc-200 shadow-lg shadow-white/5'}`}
+                          >
+                            <Camera className="w-3.5 h-3.5" />
+                            {isSelected ? 'محدد' : 'اختيار'}
+                          </motion.button>
+                          <motion.button
+                            whileTap={{ scale: 0.95 }}
+                            onClick={() => { setSelectedFolder(f); setView('gallery'); }}
+                            className="flex-1 flex items-center justify-center gap-1.5 text-xs bg-zinc-800/80 backdrop-blur-md py-3 rounded-xl font-bold border border-white/5 hover:bg-zinc-700 transition-colors text-white cursor-pointer"
+                          >
+                            <ImageIcon className="w-3.5 h-3.5" />
+                            عرض الصور
+                          </motion.button>
+                        </div>
+                      </div>
+                    </motion.div>
+                  );
+                })}
               </motion.div>
 
               {folders.length === 0 && (
-                <motion.div 
+                <motion.div
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  className="text-center py-24 bg-zinc-900/30 rounded-[2rem] border border-dashed border-white/10 mt-4"
+                  className="relative text-center py-24 px-6 bg-zinc-900/30 rounded-[2rem] border border-dashed border-white/10 mt-4 overflow-hidden"
                 >
-                  <Folder className="w-16 h-16 mx-auto mb-6 text-zinc-800" />
-                  <h3 className="text-lg font-bold text-zinc-300 mb-2">ابدأ بإنشاء مجلد</h3>
-                  <p className="text-sm text-zinc-500 mb-8 max-w-[200px] mx-auto">تحتاج إلى مجلد لحفظ الصور الملتقطة وتنظيمها</p>
-                  <motion.button 
+                  <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(37,99,235,0.12),transparent_60%)] pointer-events-none" />
+                  <div className="relative w-20 h-20 mx-auto mb-6 rounded-3xl bg-gradient-to-br from-blue-600/20 to-blue-900/5 border border-blue-500/10 flex items-center justify-center">
+                    <Folder className="w-9 h-9 text-blue-400/70" />
+                  </div>
+                  <h3 className="relative text-lg font-bold text-zinc-200 mb-2">ابدأ بإنشاء مجلد</h3>
+                  <p className="relative text-sm text-zinc-500 mb-8 max-w-[220px] mx-auto leading-relaxed">تحتاج إلى مجلد لحفظ الصور الملتقطة وتنظيمها</p>
+                  <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
                     onClick={() => setIsCreatingFolder(true)}
-                    className="bg-white text-black px-8 py-3 rounded-2xl font-bold shadow-xl"
+                    className="relative bg-white text-black px-8 py-3 rounded-2xl font-bold shadow-xl cursor-pointer inline-flex items-center gap-2"
                   >
+                    <FolderPlus className="w-4 h-4" />
                     إنشاء أول مجلد
                   </motion.button>
                 </motion.div>
@@ -1854,7 +1886,8 @@ export default function App() {
               whileHover={{ scale: 1.05 }}
               whileTap={{ scale: 0.95 }}
               onClick={() => setIsCreatingFolder(true)}
-              className="fixed bottom-6 right-6 w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center shadow-2xl shadow-blue-600/40 z-50"
+              className="sm:hidden fixed bottom-6 right-6 w-16 h-16 bg-blue-600 rounded-full flex items-center justify-center shadow-2xl shadow-blue-600/40 z-50 cursor-pointer"
+              title="مجلد جديد"
             >
               <FolderPlus className="w-8 h-8 text-white" />
             </motion.button>
