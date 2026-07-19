@@ -12,6 +12,7 @@ service cloud.firestore {
     //   - name: string (required, 1-50 chars)
     //   - ownerId: string (required, matches auth.uid)
     //   - createdAt: timestamp (required)
+    //   - coverImage: string (optional, base64 thumbnail < 300KB)
     //
     // Collection: photos
     // Document ID: auto-generated
@@ -63,10 +64,11 @@ service cloud.firestore {
 
     function isValidFolder(data) {
       return hasRequiredFields(['name', 'ownerId', 'createdAt']) &&
-             hasOnlyAllowedFields(['name', 'ownerId', 'createdAt']) &&
+             hasOnlyAllowedFields(['name', 'ownerId', 'createdAt', 'coverImage']) &&
              data.name is string && data.name.size() > 0 && data.name.size() <= 50 &&
              data.ownerId == request.auth.uid &&
-             data.createdAt is timestamp;
+             data.createdAt is timestamp &&
+             (!('coverImage' in data) || (data.coverImage is string && data.coverImage.size() < 300000));
     }
 
     function isValidPhoto(data) {
