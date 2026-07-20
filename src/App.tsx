@@ -4,7 +4,7 @@
  */
 
 import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
-import { Camera, MapPin, RefreshCw, Download, X, Info, FolderPlus, Folder, Image as ImageIcon, LogOut, LogIn, ChevronLeft, Save, ArrowLeft, Check, Share2, FolderSync, ZoomIn, ZoomOut, Database, Upload, User as UserIcon, Edit2, Search } from 'lucide-react';
+import { Camera, MapPin, RefreshCw, Download, X, Info, FolderPlus, Folder, Image as ImageIcon, LogOut, LogIn, ChevronLeft, Save, ArrowLeft, Check, Share2, FolderSync, ZoomIn, ZoomOut, Database, Upload, User as UserIcon, Edit2, Search, Menu } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   auth, db, googleProvider, signInWithPopup, signOut, onAuthStateChanged,
@@ -92,6 +92,7 @@ export default function App() {
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [isFoldersSearchOpen, setIsFoldersSearchOpen] = useState(false);
+  const [isHeaderMenuOpen, setIsHeaderMenuOpen] = useState(false);
   const [foldersSearchQuery, setFoldersSearchQuery] = useState('');
   const [folderPhotoCounts, setFolderPhotoCounts] = useState<Record<string, number>>({});
 
@@ -1546,33 +1547,34 @@ export default function App() {
             <h1 className="text-lg font-bold tracking-tight drop-shadow-md">ReefSup V1.2</h1>
           </div>
 
-          {/* Go to Folders Button */}
+          {/* Go to Folders Button (hidden on mobile, folded into the menu there) */}
           <button
             onClick={() => { setView('folders'); setUploadedImages([]); }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all duration-300 text-xs font-bold cursor-pointer shadow-lg ${
-              view === 'folders' 
-                ? 'bg-blue-600 text-white border-blue-500 shadow-blue-600/20' 
+            className={`hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-xl border transition-all duration-300 text-xs font-bold cursor-pointer shadow-lg ${
+              view === 'folders'
+                ? 'bg-blue-600 text-white border-blue-500 shadow-blue-600/20'
                 : 'bg-white/10 hover:bg-white/20 text-white border-white/10 hover:border-white/20'
             }`}
             title="الذهاب إلى صفحة المجلدات"
           >
             <Folder className="w-4 h-4 shrink-0 text-blue-400" />
-            <span className="hidden sm:inline">صفحة المجلدات</span>
-            <span className="sm:hidden">المجلدات</span>
+            <span>صفحة المجلدات</span>
           </button>
         </div>
-        <div className="flex items-center gap-2">
+
+        {/* Actions: inline icons on tablet/desktop, collapsed into a menu on mobile so they don't overlap the title */}
+        <div className="hidden sm:flex items-center gap-2">
           {/* Camera Button */}
-          <button 
+          <button
             onClick={() => { setView('camera'); setUploadedImages([]); }}
             className={`p-2 backdrop-blur-md rounded-full transition-colors border border-white/10 ${view === 'camera' ? 'bg-blue-600 text-white border-blue-500' : 'bg-black/40 text-zinc-400 hover:bg-zinc-800'}`}
             title="الكاميرا"
           >
             <Camera className="w-5 h-5" />
           </button>
-          
+
           {/* Upload Button */}
-          <button 
+          <button
             onClick={() => { setView('upload'); setUploadedImages([]); }}
             className={`p-2 backdrop-blur-md rounded-full transition-colors border border-white/10 ${view === 'upload' ? 'bg-blue-600 text-white border-blue-500' : 'bg-black/40 text-zinc-400 hover:bg-zinc-800'}`}
             title="دمج موقع وصورة"
@@ -1581,7 +1583,7 @@ export default function App() {
           </button>
 
           {/* Folders Button */}
-          <button 
+          <button
             onClick={() => { setView('folders'); setUploadedImages([]); }}
             className={`p-2 backdrop-blur-md rounded-full transition-colors border border-white/10 ${view === 'folders' ? 'bg-blue-600 text-white border-blue-500' : 'bg-black/40 text-zinc-400 hover:bg-zinc-800'}`}
             title="المجلدات"
@@ -1590,7 +1592,7 @@ export default function App() {
           </button>
 
           {user && (
-            <button 
+            <button
               onClick={async () => {
                 if (user.uid === 'guest_user') {
                   setUser(null);
@@ -1604,6 +1606,73 @@ export default function App() {
               <LogOut className="w-5 h-5" />
             </button>
           )}
+        </div>
+
+        {/* Mobile menu trigger + dropdown */}
+        <div className="relative sm:hidden">
+          <button
+            onClick={() => setIsHeaderMenuOpen(o => !o)}
+            className={`p-2 backdrop-blur-md rounded-full transition-colors border border-white/10 ${isHeaderMenuOpen ? 'bg-blue-600 text-white border-blue-500' : 'bg-black/40 text-zinc-400 hover:bg-zinc-800'}`}
+            title="القائمة"
+          >
+            <Menu className="w-5 h-5" />
+          </button>
+
+          <AnimatePresence>
+            {isHeaderMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setIsHeaderMenuOpen(false)} />
+                <motion.div
+                  initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                  transition={{ duration: 0.15 }}
+                  className="absolute left-0 top-full mt-2 w-52 bg-zinc-900 border border-white/10 rounded-2xl shadow-2xl p-1.5 flex flex-col gap-1 z-50"
+                >
+                  <button
+                    onClick={() => { setView('camera'); setUploadedImages([]); setIsHeaderMenuOpen(false); }}
+                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-bold transition-colors cursor-pointer ${view === 'camera' ? 'bg-blue-600 text-white' : 'text-zinc-300 hover:bg-white/5'}`}
+                  >
+                    <Camera className="w-4 h-4" />
+                    الكاميرا
+                  </button>
+                  <button
+                    onClick={() => { setView('upload'); setUploadedImages([]); setIsHeaderMenuOpen(false); }}
+                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-bold transition-colors cursor-pointer ${view === 'upload' ? 'bg-blue-600 text-white' : 'text-zinc-300 hover:bg-white/5'}`}
+                  >
+                    <Upload className="w-4 h-4" />
+                    دمج موقع وصورة
+                  </button>
+                  <button
+                    onClick={() => { setView('folders'); setUploadedImages([]); setIsHeaderMenuOpen(false); }}
+                    className={`flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-bold transition-colors cursor-pointer ${view === 'folders' ? 'bg-blue-600 text-white' : 'text-zinc-300 hover:bg-white/5'}`}
+                  >
+                    <Folder className="w-4 h-4" />
+                    المجلدات
+                  </button>
+                  {user && (
+                    <>
+                      <div className="h-px bg-white/10 my-1" />
+                      <button
+                        onClick={async () => {
+                          setIsHeaderMenuOpen(false);
+                          if (user.uid === 'guest_user') {
+                            setUser(null);
+                          } else {
+                            await signOut(auth);
+                          }
+                        }}
+                        className="flex items-center gap-2.5 px-3 py-2.5 rounded-xl text-sm font-bold text-red-400 hover:bg-red-500/10 transition-colors cursor-pointer"
+                      >
+                        <LogOut className="w-4 h-4" />
+                        تسجيل الخروج
+                      </button>
+                    </>
+                  )}
+                </motion.div>
+              </>
+            )}
+          </AnimatePresence>
         </div>
       </header>
 
