@@ -70,6 +70,14 @@ const getPhotoDateLabel = (d: Date): string => {
   return d.toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' });
 };
 
+const getPhotoCountLabel = (count: number): string => {
+  if (count === 0) return 'لا توجد صور';
+  if (count === 1) return 'صورة واحدة';
+  if (count === 2) return 'صورتان';
+  if (count >= 3 && count <= 10) return `${count} صور`;
+  return `${count} صورة`;
+};
+
 export default function App() {
   // Auth State
   const [user, setUser] = useState<User | null>(null);
@@ -85,6 +93,7 @@ export default function App() {
   const [newFolderName, setNewFolderName] = useState('');
   const [isFoldersSearchOpen, setIsFoldersSearchOpen] = useState(false);
   const [foldersSearchQuery, setFoldersSearchQuery] = useState('');
+  const [folderPhotoCounts, setFolderPhotoCounts] = useState<Record<string, number>>({});
 
   // Rename Folder State
   const [isRenamingFolder, setIsRenamingFolder] = useState(false);
@@ -229,6 +238,29 @@ export default function App() {
     }, (err) => handleFirestoreError(err, OperationType.LIST, 'photos'));
     return () => unsubscribe();
   }, [user, selectedFolder, view]);
+
+  // Folder Photo Counts Listener (for the folders list view)
+  useEffect(() => {
+    if (!user || view !== 'folders') return;
+    if (user.uid === 'guest_user') {
+      const storedPhotos = localStorage.getItem('guest_photos');
+      const allPhotos = storedPhotos ? JSON.parse(storedPhotos) : [];
+      const counts: Record<string, number> = {};
+      allPhotos.forEach((p: any) => { counts[p.folderId] = (counts[p.folderId] || 0) + 1; });
+      setFolderPhotoCounts(counts);
+      return;
+    }
+    const q = query(collection(db, 'photos'), where('ownerId', '==', user.uid));
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const counts: Record<string, number> = {};
+      snapshot.docs.forEach(d => {
+        const folderId = d.data().folderId;
+        counts[folderId] = (counts[folderId] || 0) + 1;
+      });
+      setFolderPhotoCounts(counts);
+    }, (err) => handleFirestoreError(err, OperationType.LIST, 'photos'));
+    return () => unsubscribe();
+  }, [user, view]);
 
   // Prompt user to create their first folder if none exists
   useEffect(() => {
@@ -1872,14 +1904,29 @@ export default function App() {
                       </div>
 
                       <div className="relative p-5 pt-16 flex flex-col flex-1">
-                        <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-4 transition-colors ${isSelected ? 'bg-blue-500/20 text-blue-400' : 'bg-zinc-800 text-zinc-400 group-hover:bg-zinc-750'}`}>
-                          <Folder className="w-7 h-7" />
+                        <div className="relative h-24 mb-4 shrink-0">
+                          {/* soft ambient shadow */}
+                          <div className={`absolute bottom-0 inset-x-5 h-4 rounded-full blur-xl transition-colors ${isSelected ? 'bg-blue-500/40' : 'bg-black/30'}`} />
+
+                          {/* folder back + tab (glass) */}
+                          <div className={`absolute inset-x-1 top-1 bottom-0 rounded-2xl backdrop-blur-sm border transition-colors ${isSelected ? 'bg-blue-400/20 border-blue-300/30' : 'bg-white/[0.06] border-white/10 group-hover:bg-white/[0.09]'}`} />
+                          <div className={`absolute top-0 right-4 w-9 h-3.5 rounded-t-lg backdrop-blur-sm transition-colors ${isSelected ? 'bg-blue-400/30' : 'bg-white/10'}`} />
+
+                          {/* papers peeking out */}
+                          <div className={`absolute top-3 left-1/2 -translate-x-1/2 w-[58%] h-14 rounded-xl shadow-lg rotate-[4deg] p-2.5 flex flex-col gap-1.5 transition-colors ${isSelected ? 'bg-white' : 'bg-zinc-200'}`}>
+                            <div className="h-1.5 w-3/4 bg-black/10 rounded-full" />
+                            <div className="h-1.5 w-1/2 bg-black/10 rounded-full" />
+                            <div className="h-1.5 w-2/3 bg-black/10 rounded-full" />
+                          </div>
+
+                          {/* front pocket (frosted glass, blurs papers behind it) */}
+                          <div className={`absolute bottom-0 inset-x-0 h-14 rounded-2xl overflow-hidden backdrop-blur-md border shadow-xl transition-colors ${isSelected ? 'bg-gradient-to-br from-blue-300/25 via-blue-500/15 to-blue-600/20 border-blue-200/30' : 'bg-gradient-to-br from-white/10 via-white/5 to-white/0 border-white/15 group-hover:from-white/15'}`}>
+                            <div className="absolute -top-6 -left-6 w-20 h-20 bg-white/25 rounded-full blur-2xl" />
+                          </div>
                         </div>
                         <h3 className="font-bold text-lg mb-1 truncate">{f.name}</h3>
                         <p className="text-xs mb-5 text-zinc-500">
-                          {f.createdAt?.toDate
-                            ? new Date(f.createdAt.toDate()).toLocaleDateString('ar-EG', { day: 'numeric', month: 'long', year: 'numeric' })
-                            : 'الآن'}
+                          {getPhotoCountLabel(folderPhotoCounts[f.id] || 0)}
                         </p>
 
                         <div className="flex gap-2.5 mt-auto pt-4 border-t border-white/5">

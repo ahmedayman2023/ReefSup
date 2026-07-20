@@ -1,8 +1,15 @@
 @import "tailwindcss";
 
+@theme {
+  --font-sans: 'Cairo', sans-serif;
+}
+
 @layer base {
   html, body, #root {
     @apply h-full overflow-hidden;
     overscroll-behavior: none;
+  }
+  body {
+    font-family: 'Cairo', sans-serif;
   }
 }
