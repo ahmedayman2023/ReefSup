@@ -4,11 +4,11 @@
  */
 
 import { useState, useRef, useEffect, useCallback, useMemo, memo } from 'react';
-import { Camera, MapPin, RefreshCw, Download, X, Info, FolderPlus, Folder, Image as ImageIcon, LogOut, LogIn, ChevronLeft, Save, ArrowLeft, Check, Share2, FolderSync, ZoomIn, ZoomOut, Database, Upload, User as UserIcon, Edit2, Search, Menu } from 'lucide-react';
+import { Camera, MapPin, RefreshCw, Download, X, Info, FolderPlus, Folder, Image as ImageIcon, LogOut, LogIn, ChevronLeft, Save, ArrowLeft, Check, Share2, FolderSync, ZoomIn, ZoomOut, Database, Upload, User as UserIcon, Edit2, Search, Menu, Move } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   auth, db, googleProvider, signInWithPopup, signOut, onAuthStateChanged,
-  collection, addDoc, query, where, onSnapshot, serverTimestamp, doc, setDoc,
+  collection, addDoc, query, where, onSnapshot, serverTimestamp, doc, setDoc, updateDoc,
   User, OperationType, handleFirestoreError
 } from './firebase';
 
@@ -100,6 +100,10 @@ export default function App() {
   const [isRenamingFolder, setIsRenamingFolder] = useState(false);
   const [renamingFolder, setRenamingFolder] = useState<FolderItem | null>(null);
   const [renameFolderName, setRenameFolderName] = useState('');
+
+  // Move Photos State
+  const [isMovingPhotos, setIsMovingPhotos] = useState(false);
+  const [moveSearchQuery, setMoveSearchQuery] = useState('');
 
   // Upload State
   const [uploadedImages, setUploadedImages] = useState<UploadedImage[]>([]);
@@ -1292,6 +1296,30 @@ export default function App() {
     }
   };
 
+  const movePhotosToFolder = async (targetFolder: FolderItem) => {
+    if (!user || multiSelectedIds.length === 0) return;
+    const ids = [...multiSelectedIds];
+    try {
+      if (user.uid === 'guest_user') {
+        const storedPhotos = localStorage.getItem('guest_photos');
+        const allPhotos: PhotoItem[] = storedPhotos ? JSON.parse(storedPhotos) : [];
+        const updatedPhotos = allPhotos.map(p => ids.includes(p.id) ? { ...p, folderId: targetFolder.id } : p);
+        localStorage.setItem('guest_photos', JSON.stringify(updatedPhotos));
+        setPhotos(updatedPhotos.filter(p => p.folderId === selectedFolder?.id));
+      } else {
+        await Promise.all(ids.map(id => updateDoc(doc(db, 'photos', id), { folderId: targetFolder.id })));
+      }
+
+      setIsMovingPhotos(false);
+      setIsSelectMode(false);
+      setMultiSelectedIds([]);
+      setSuccessMessage(ids.length === 1 ? `تم نقل الصورة إلى "${targetFolder.name}" ✨` : `تم نقل ${ids.length} صور إلى "${targetFolder.name}" ✨`);
+      setTimeout(() => setSuccessMessage(null), 3000);
+    } catch (err) {
+      handleFirestoreError(err, OperationType.UPDATE, 'photos');
+    }
+  };
+
   const downloadPhoto = async (imageSrc?: string) => {
     const src = imageSrc || capturedImage;
     if (!src) return;
@@ -2435,6 +2463,18 @@ export default function App() {
                   >
                     <Share2 className="w-8 h-8 text-white" />
                   </motion.button>
+                  <motion.button
+                    initial={{ scale: 0, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    exit={{ scale: 0, opacity: 0 }}
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    onClick={() => { setMoveSearchQuery(''); setIsMovingPhotos(true); }}
+                    title="نقل الصور المحددة"
+                    className="w-16 h-16 bg-purple-600 rounded-full flex items-center justify-center shadow-2xl shadow-purple-600/40 cursor-pointer"
+                  >
+                    <Move className="w-8 h-8 text-white" />
+                  </motion.button>
                 </div>
               )}
             </AnimatePresence>
@@ -2979,12 +3019,93 @@ export default function App() {
                   >
                     إلغاء
                   </button>
-                  <button 
-                    onClick={renameFolder} 
+                  <button
+                    onClick={renameFolder}
                     disabled={!renameFolderName.trim() || renameFolderName.trim() === renamingFolder?.name}
                     className="flex-1 bg-blue-600 hover:bg-blue-500 rounded-xl py-3.5 font-bold text-sm text-white shadow-lg shadow-blue-600/20 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50"
                   >
                     تطبيق التعديل
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* Move Photos Modal */}
+        <AnimatePresence>
+          {isMovingPhotos && (
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="fixed inset-0 z-[60] bg-black/85 backdrop-blur-md flex items-center justify-center p-4 text-right"
+              dir="rtl"
+            >
+              <motion.div
+                initial={{ scale: 0.95, y: 15 }}
+                animate={{ scale: 1, y: 0 }}
+                exit={{ scale: 0.95, y: 15 }}
+                className="bg-zinc-900 w-full max-w-md rounded-3xl p-6 border border-white/10 shadow-2xl flex flex-col gap-4 text-white"
+              >
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="text-xl font-bold flex items-center gap-2">
+                      <Move className="w-5 h-5 text-purple-400" />
+                      نقل الصور
+                    </h3>
+                    <p className="text-xs text-zinc-500 mt-1">
+                      اختر المجلد الذي تريد نقل {multiSelectedIds.length === 1 ? 'الصورة' : `${multiSelectedIds.length} صور`} إليه.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => setIsMovingPhotos(false)}
+                    className="p-1.5 bg-zinc-800 hover:bg-zinc-750 rounded-full transition-colors text-zinc-400 hover:text-white cursor-pointer"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+
+                <div className="relative mt-2">
+                  <Search className="w-4 h-4 text-zinc-600 absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    placeholder="ابحث عن مجلد..."
+                    value={moveSearchQuery}
+                    onChange={e => setMoveSearchQuery(e.target.value)}
+                    className="w-full bg-zinc-800 border-none rounded-2xl p-4 pr-11 text-sm placeholder-zinc-600 text-white focus:ring-2 focus:ring-purple-500"
+                    autoFocus
+                  />
+                </div>
+
+                <div className="flex flex-col gap-2 max-h-64 overflow-y-auto">
+                  {folders
+                    .filter(f => f.id !== selectedFolder?.id)
+                    .filter(f => f.name.toLowerCase().includes(moveSearchQuery.trim().toLowerCase()))
+                    .map(f => (
+                      <button
+                        key={f.id}
+                        onClick={() => movePhotosToFolder(f)}
+                        className="flex items-center gap-3 p-3 bg-zinc-800/60 hover:bg-zinc-800 rounded-2xl text-right transition-colors cursor-pointer"
+                      >
+                        <div className="p-2 rounded-xl bg-zinc-700/50 text-purple-400 shrink-0">
+                          <Folder className="w-4 h-4" />
+                        </div>
+                        <span className="text-sm font-bold truncate flex-1">{f.name}</span>
+                      </button>
+                    ))}
+
+                  {folders.filter(f => f.id !== selectedFolder?.id).length === 0 && (
+                    <p className="text-xs text-zinc-600 text-center py-6">لا توجد مجلدات أخرى لنقل الصور إليها.</p>
+                  )}
+                </div>
+
+                <div className="flex gap-3 pt-2">
+                  <button
+                    onClick={() => setIsMovingPhotos(false)}
+                    className="flex-1 py-3.5 bg-zinc-800 hover:bg-zinc-750 rounded-xl text-zinc-400 font-bold text-sm transition-colors cursor-pointer border border-white/5"
+                  >
+                    إلغاء
                   </button>
                 </div>
               </motion.div>
