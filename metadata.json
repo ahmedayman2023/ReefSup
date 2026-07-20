@@ -1,5 +1,5 @@
 {
-  "name": "ReefSupV1.1",
+  "name": "ReefSup V1.2",
   "description": "تطبيق يلتقط صوراً مع إضافة معلومات الموقع الجغرافي وخريطة مصغرة عليها.",
   "requestFramePermissions": [
     "camera",

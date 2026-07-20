@@ -1341,7 +1341,7 @@ export default function App() {
           await navigator.share({
             files,
             title: `صور من ${selectedFolder?.name}`,
-            text: `تمت مشاركة ${selectedPhotos.length} صورة من تطبيق ReefSupV1.1`,
+            text: `تمت مشاركة ${selectedPhotos.length} صورة من تطبيق ReefSup V1.2`,
           });
           return;
         }
@@ -1350,7 +1350,7 @@ export default function App() {
       if (navigator.share) {
         await navigator.share({
           title: `صور من ${selectedFolder?.name}`,
-          text: `تمت مشاركة ${selectedPhotos.length} صورة من تطبيق ReefSupV1.1`,
+          text: `تمت مشاركة ${selectedPhotos.length} صورة من تطبيق ReefSup V1.2`,
           url: window.location.href,
         });
       } else {
@@ -1438,7 +1438,7 @@ export default function App() {
           <MapPin className="w-12 h-12 text-white" />
         </motion.div>
         <div className="flex flex-col items-center gap-3">
-          <h1 className="text-4xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-b from-white to-white/40">ReefSupV1.1</h1>
+          <h1 className="text-4xl font-black tracking-tighter bg-clip-text text-transparent bg-gradient-to-b from-white to-white/40">ReefSup V1.2</h1>
           <div className="flex items-center gap-3 px-4 py-2 bg-white/5 backdrop-blur-md rounded-full border border-white/10">
             <RefreshCw className="w-3 h-3 animate-spin text-blue-400" />
             <span className="text-[10px] uppercase tracking-[0.2em] font-bold text-zinc-500">Initializing Experience</span>
@@ -1462,7 +1462,7 @@ export default function App() {
           <div className="w-24 h-24 bg-blue-600/20 rounded-3xl flex items-center justify-center mb-8 border border-blue-500/30 shadow-2xl shadow-blue-900/20">
             <MapPin className="w-12 h-12 text-blue-400" />
           </div>
-          <h1 className="text-4xl font-bold mb-4 tracking-tight drop-shadow-md">ReefSupV1.1</h1>
+          <h1 className="text-4xl font-bold mb-4 tracking-tight drop-shadow-md">ReefSup V1.2</h1>
           <p className="text-zinc-400 text-center mb-10 leading-relaxed">
             قم بتسجيل الدخول لحفظ صورك ومجلداتك بأمان على السحابة والوصول إليها من أي مكان.
           </p>
@@ -1543,7 +1543,7 @@ export default function App() {
             <div className="bg-blue-600 p-1.5 rounded-lg shadow-lg shadow-blue-900/20">
               <MapPin className="w-5 h-5" />
             </div>
-            <h1 className="text-lg font-bold tracking-tight drop-shadow-md">ReefSupV1.1</h1>
+            <h1 className="text-lg font-bold tracking-tight drop-shadow-md">ReefSup V1.2</h1>
           </div>
 
           {/* Go to Folders Button */}
