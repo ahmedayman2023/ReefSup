@@ -119,6 +119,7 @@ export default function App() {
   const [location, setLocation] = useState<LocationData | null>(null);
   const [isEditingLocation, setIsEditingLocation] = useState(false);
   const [editCity, setEditCity] = useState('');
+  const [editCountry, setEditCountry] = useState('');
   const [editAddress, setEditAddress] = useState('');
   const [editLatitude, setEditLatitude] = useState(0);
   const [editLongitude, setEditLongitude] = useState(0);
@@ -434,6 +435,7 @@ export default function App() {
   const handleOpenEditLocation = useCallback(() => {
     if (location) {
       setEditCity(location.city || '');
+      setEditCountry(location.country || '');
       setEditAddress(location.address || '');
       setEditLatitude(location.latitude);
       setEditLongitude(location.longitude);
@@ -454,6 +456,7 @@ export default function App() {
       setLocation({
         ...location,
         city: editCity,
+        country: editCountry,
         address: editAddress,
         latitude: Number(editLatitude),
         longitude: Number(editLongitude),
@@ -462,7 +465,7 @@ export default function App() {
       });
       setIsEditingLocation(false);
     }
-  }, [location, editCity, editAddress, editLatitude, editLongitude, editDate, editTime]);
+  }, [location, editCity, editCountry, editAddress, editLatitude, editLongitude, editDate, editTime]);
 
   const syncMapPosition = useCallback((lat: number, lng: number) => {
     if (mapInstanceRef.current && markerInstanceRef.current) {
@@ -485,6 +488,7 @@ export default function App() {
     syncMapPosition(coords.lat, coords.lon);
 
     let city: string | undefined;
+    let country: string | undefined;
     let address: string | undefined;
     try {
       const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=json&lat=${coords.lat}&lon=${coords.lon}&zoom=18&addressdetails=1`, {
@@ -494,8 +498,10 @@ export default function App() {
       if (data) {
         const addr = data.address;
         city = addr.city || addr.town || addr.village || addr.suburb || addr.state || addr.country || "";
+        country = addr.country || "";
         address = data.display_name || "";
         setEditCity(city);
+        setEditCountry(country);
         setEditAddress(address);
       }
     } catch (err) {
@@ -508,11 +514,13 @@ export default function App() {
       latitude: coords.lat,
       longitude: coords.lon,
       ...(city !== undefined ? { city } : {}),
+      ...(country !== undefined ? { country } : {}),
       ...(address !== undefined ? { address } : {})
     } : {
       latitude: coords.lat,
       longitude: coords.lon,
       city: city || '',
+      country: country || '',
       address: address || '',
       timestamp: formatTimestamp(new Date()),
       rawTimestamp: new Date().toISOString()
@@ -588,6 +596,7 @@ export default function App() {
     const addr = item.address || {};
     const city = addr.city || addr.town || addr.village || addr.suburb || addr.state || addr.country || "";
     setEditCity(city);
+    setEditCountry(addr.country || "");
     setEditAddress(item.display_name || "");
     setSearchLocationResults([]);
     setSearchLocationQuery('');
@@ -605,6 +614,7 @@ export default function App() {
         const addr = data.address;
         const city = addr.city || addr.town || addr.village || addr.suburb || addr.state || addr.country || "";
         setEditCity(city);
+        setEditCountry(addr.country || "");
         setEditAddress(data.display_name || "");
       }
     } catch (err) {
@@ -708,6 +718,7 @@ export default function App() {
   useEffect(() => {
     if (isEditingLocation && location) {
       setEditCity(location.city || '');
+      setEditCountry(location.country || '');
       setEditAddress(location.address || '');
       setEditLatitude(location.latitude);
       setEditLongitude(location.longitude);
@@ -2762,7 +2773,7 @@ export default function App() {
                   {/* City Input */}
                   <div className="flex flex-col gap-1">
                     <label className="text-xs font-bold text-zinc-400">المدينة / المحافظة</label>
-                    <input 
+                    <input
                       type="text"
                       placeholder="المدينة"
                       value={editCity}
@@ -2771,10 +2782,22 @@ export default function App() {
                     />
                   </div>
 
-                  {/* Detailed Address Input */}
+                  {/* Country Input */}
                   <div className="flex flex-col gap-1">
+                    <label className="text-xs font-bold text-zinc-400">الدولة</label>
+                    <input
+                      type="text"
+                      placeholder="الدولة"
+                      value={editCountry}
+                      onChange={e => setEditCountry(e.target.value)}
+                      className="w-full bg-zinc-800 border-none rounded-xl p-2.5 text-xs text-white placeholder-zinc-600 focus:ring-1 focus:ring-blue-500"
+                    />
+                  </div>
+
+                  {/* Detailed Address Input */}
+                  <div className="flex flex-col gap-1 col-span-2">
                     <label className="text-xs font-bold text-zinc-400">العنوان أو الحي</label>
-                    <input 
+                    <input
                       type="text"
                       placeholder="الحي أو الطريق"
                       value={editAddress}
