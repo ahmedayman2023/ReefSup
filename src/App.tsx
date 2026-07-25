@@ -49,6 +49,8 @@ interface UploadedImage {
 
 type ViewMode = 'camera' | 'folders' | 'gallery' | 'upload';
 
+const GOOGLE_MAPS_API_KEY = process.env.GOOGLE_MAPS_API_KEY || '';
+
 const getPhotoDate = (p: PhotoItem): Date => {
   const c: any = p.createdAt;
   if (c?.toDate) return c.toDate();
@@ -469,8 +471,9 @@ export default function App() {
 
   const syncMapPosition = useCallback((lat: number, lng: number) => {
     if (mapInstanceRef.current && markerInstanceRef.current) {
-      mapInstanceRef.current.setView([lat, lng], 15);
-      markerInstanceRef.current.setLatLng([lat, lng]);
+      mapInstanceRef.current.setCenter({ lat, lng });
+      mapInstanceRef.current.setZoom(15);
+      markerInstanceRef.current.setPosition({ lat, lng });
     }
   }, []);
 
@@ -622,14 +625,11 @@ export default function App() {
     }
   }, []);
 
-  // Leaflet map setup hook
+  // Google Maps setup hook
   useEffect(() => {
     if (!isEditingLocation) {
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-        mapInstanceRef.current = null;
-        markerInstanceRef.current = null;
-      }
+      mapInstanceRef.current = null;
+      markerInstanceRef.current = null;
       setIsMapReady(false);
       return;
     }
@@ -637,8 +637,8 @@ export default function App() {
     let active = true;
 
     const initMap = () => {
-      const L = (window as any).L;
-      if (!L || !active) return;
+      const google = (window as any).google;
+      if (!google?.maps || !active) return;
 
       const container = document.getElementById('edit-map-container');
       if (!container) {
@@ -646,60 +646,51 @@ export default function App() {
         return;
       }
 
-      if (mapInstanceRef.current) {
-        mapInstanceRef.current.remove();
-      }
-
       const initialLat = editLatitude || 24.7136;
       const initialLng = editLongitude || 46.6753;
 
-      const map = L.map('edit-map-container', { zoomControl: false }).setView([initialLat, initialLng], 13);
-      L.control.zoom({ position: 'bottomright' }).addTo(map);
+      const map = new google.maps.Map(container, {
+        center: { lat: initialLat, lng: initialLng },
+        zoom: 13,
+        disableDefaultUI: true,
+        zoomControl: true,
+        zoomControlOptions: { position: google.maps.ControlPosition.RIGHT_BOTTOM },
+      });
 
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '© OpenStreetMap'
-      }).addTo(map);
-
-      const marker = L.marker([initialLat, initialLng], { draggable: true }).addTo(map);
+      const marker = new google.maps.Marker({
+        position: { lat: initialLat, lng: initialLng },
+        map,
+        draggable: true,
+      });
 
       mapInstanceRef.current = map;
       markerInstanceRef.current = marker;
       setIsMapReady(true);
 
-      map.on('click', (e: any) => {
-        const { lat, lng } = e.latlng;
-        marker.setLatLng([lat, lng]);
+      map.addListener('click', (e: any) => {
+        const lat = e.latLng.lat();
+        const lng = e.latLng.lng();
+        marker.setPosition({ lat, lng });
         updateCoordinatesFromMap(lat, lng);
       });
 
-      marker.on('dragend', () => {
-        const { lat, lng } = marker.getLatLng();
-        updateCoordinatesFromMap(lat, lng);
+      marker.addListener('dragend', () => {
+        const pos = marker.getPosition();
+        updateCoordinatesFromMap(pos.lat(), pos.lng());
       });
     };
 
-    if (!(window as any).L) {
-      // Inject CSS
-      if (!document.getElementById('leaflet-css')) {
-        const link = document.createElement('link');
-        link.id = 'leaflet-css';
-        link.rel = 'stylesheet';
-        link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-        document.head.appendChild(link);
-      }
-
-      // Inject JS
-      if (!document.getElementById('leaflet-js')) {
+    if (!(window as any).google?.maps) {
+      if (!document.getElementById('google-maps-js')) {
         const script = document.createElement('script');
-        script.id = 'leaflet-js';
-        script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-        script.onload = () => {
-          initMap();
-        };
+        script.id = 'google-maps-js';
+        script.src = `https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}`;
+        script.async = true;
+        script.onload = () => initMap();
         document.head.appendChild(script);
       } else {
         const checkLoaded = setInterval(() => {
-          if ((window as any).L) {
+          if ((window as any).google?.maps) {
             clearInterval(checkLoaded);
             initMap();
           }
@@ -723,8 +714,9 @@ export default function App() {
       setEditLatitude(location.latitude);
       setEditLongitude(location.longitude);
       if (mapInstanceRef.current && markerInstanceRef.current) {
-        mapInstanceRef.current.setView([location.latitude, location.longitude], 13);
-        markerInstanceRef.current.setLatLng([location.latitude, location.longitude]);
+        mapInstanceRef.current.setCenter({ lat: location.latitude, lng: location.longitude });
+        mapInstanceRef.current.setZoom(13);
+        markerInstanceRef.current.setPosition({ lat: location.latitude, lng: location.longitude });
       }
     }
   }, [location, isEditingLocation]);
@@ -757,8 +749,7 @@ export default function App() {
       canvas.height = video.videoHeight;
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
 
-      // Using a more reliable map provider or handling error
-      const mapUrl = `https://static-maps.yandex.ru/1.x/?lang=en_US&ll=${location.longitude},${location.latitude}&z=16&l=map&size=300,300`;
+      const mapUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${location.latitude},${location.longitude}&zoom=16&size=300x300&maptype=roadmap&key=${GOOGLE_MAPS_API_KEY}`;
       
       const mapImg = new Image();
       mapImg.crossOrigin = "anonymous";
@@ -824,11 +815,6 @@ export default function App() {
           ctx.strokeStyle = 'white';
           ctx.lineWidth = 2;
           ctx.stroke();
-
-          // Google Logo placeholder (simple text for now)
-          ctx.fillStyle = 'rgba(255,255,255,0.8)';
-          ctx.font = `bold ${Math.max(10, mapSize * 0.1)}px sans-serif`;
-          ctx.fillText('Google', mapX + 5, mapY + mapSize - 10);
         } else {
           ctx.fillStyle = '#333';
           ctx.fillRect(mapX, mapY, mapSize, mapSize);
@@ -838,7 +824,7 @@ export default function App() {
         // Text Content
         const textX = mapX + mapSize + padding;
         let textY = mapY + (canvas.width * 0.04);
-        
+
         // Title: City, Province
         ctx.fillStyle = 'white';
         const titleSize = Math.max(16, canvas.width * 0.032);
@@ -1028,7 +1014,7 @@ export default function App() {
         canvas.height = img.height;
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-        const mapUrl = `https://static-maps.yandex.ru/1.x/?lang=en_US&ll=${loc.longitude},${loc.latitude}&z=16&l=map&size=300,300`;
+        const mapUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${loc.latitude},${loc.longitude}&zoom=16&size=300x300&maptype=roadmap&key=${GOOGLE_MAPS_API_KEY}`;
         const mapImg = new Image();
         mapImg.crossOrigin = "anonymous";
 
@@ -1089,10 +1075,6 @@ export default function App() {
             ctx.strokeStyle = 'white';
             ctx.lineWidth = 2;
             ctx.stroke();
-
-            ctx.fillStyle = 'rgba(255,255,255,0.8)';
-            ctx.font = `bold ${Math.max(10, mapSize * 0.1)}px sans-serif`;
-            ctx.fillText('Google', mapX + 5, mapY + mapSize - 10);
           } else {
             ctx.fillStyle = '#333';
             ctx.fillRect(mapX, mapY, mapSize, mapSize);
@@ -2759,7 +2741,7 @@ export default function App() {
                   )}
                 </div>
 
-                {/* Section 3: Interactive Leaflet Map */}
+                {/* Section 3: Interactive Google Map */}
                 <div className="flex flex-col gap-1.5">
                   <label className="text-xs font-bold text-zinc-400 flex items-center justify-between">
                     <span>الخريطة التفاعلية (اسحب الدبوس لتحديث الإحداثيات)</span>
