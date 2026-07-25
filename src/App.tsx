@@ -761,7 +761,7 @@ export default function App() {
           console.warn("Map load timed out, proceeding without map");
           finalizeCapture();
         }
-      }, 500);
+      }, 3000);
 
       const finalizeCapture = async () => {
         if (mapLoaded && !isCapturing) return; // Prevent double execution
