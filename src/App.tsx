@@ -2514,11 +2514,11 @@ export default function App() {
                       <Download className="w-6 h-6" />
                     </motion.button>
                   </div>
-                  <div className="flex-1 flex items-center justify-center p-6 bg-gradient-to-b from-black/20 to-black/80">
-                    <motion.img 
+                  <div className="flex-1 min-h-0 flex items-center justify-center p-6 bg-gradient-to-b from-black/20 to-black/80 overflow-hidden">
+                    <motion.img
                       layoutId={`photo-${selectedPhoto.id}`}
-                      src={selectedPhoto.imageUrl} 
-                      className="max-w-full max-h-full rounded-3xl shadow-[0_30px_60px_rgba(0,0,0,0.8)] border border-white/10" 
+                      src={selectedPhoto.imageUrl}
+                      className="max-w-full max-h-full object-contain rounded-3xl shadow-[0_30px_60px_rgba(0,0,0,0.8)] border border-white/10"
                     />
                   </div>
                   <div className="p-8 bg-zinc-900/60 backdrop-blur-xl border-t border-white/5">
