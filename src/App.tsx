@@ -822,48 +822,53 @@ export default function App() {
         ctx.restore();
 
         // Text Content
+        await document.fonts.ready;
         const textX = mapX + mapSize + padding;
+        const textRight = bgX + bgWidth - padding;
         let textY = mapY + (canvas.width * 0.04);
+
+        ctx.direction = 'rtl';
+        ctx.textAlign = 'right';
 
         // Title: City, Province
         ctx.fillStyle = 'white';
         const titleSize = Math.max(16, canvas.width * 0.032);
-        ctx.font = `bold ${titleSize}px sans-serif`;
-        
+        ctx.font = `bold ${titleSize}px 'Cairo', sans-serif`;
+
         const locationTitle = `${location.city || 'Dammam'}, ${location.country || 'Saudi Arabia'}`;
-        ctx.fillText(locationTitle, textX, textY);
-        
+        ctx.fillText(locationTitle, textRight, textY);
+
         // Address (wrapped)
         textY += titleSize + 8;
         const bodySize = Math.max(11, canvas.width * 0.02);
-        ctx.font = `${bodySize}px sans-serif`;
+        ctx.font = `${bodySize}px 'Cairo', sans-serif`;
         const maxWidth = bgWidth - (textX - bgX) - padding;
         const words = (location.address || "").split(' ');
         let line = '';
         const lineHeight = bodySize + 4;
-        
+
         for (let n = 0; n < words.length; n++) {
           const testLine = line + words[n] + ' ';
           if (ctx.measureText(testLine).width > maxWidth && n > 0) {
-            ctx.fillText(line, textX, textY);
+            ctx.fillText(line, textRight, textY);
             line = words[n] + ' ';
             textY += lineHeight;
           } else {
             line = testLine;
           }
         }
-        ctx.fillText(line, textX, textY);
-        
+        ctx.fillText(line, textRight, textY);
+
         // Lat/Long
         textY += lineHeight + 6;
-        ctx.font = `500 ${bodySize}px sans-serif`;
-        ctx.fillText(`Lat ${location.latitude.toFixed(6)}° Long ${location.longitude.toFixed(6)}°`, textX, textY);
-        
+        ctx.font = `500 ${bodySize}px 'Cairo', sans-serif`;
+        ctx.fillText(`Lat ${location.latitude.toFixed(6)}° Long ${location.longitude.toFixed(6)}°`, textRight, textY);
+
         // Date/Time
         textY += lineHeight + 4;
-        ctx.font = `${bodySize - 1}px sans-serif`;
+        ctx.font = `${bodySize - 1}px 'Cairo', sans-serif`;
         ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-        ctx.fillText(location.timestamp, textX, textY);
+        ctx.fillText(location.timestamp, textRight, textY);
 
         // Reduced quality for faster processing and saving (0.6 instead of 0.8)
         const dataUrl = canvas.toDataURL('image/jpeg', 0.6);
@@ -1026,7 +1031,7 @@ export default function App() {
           }
         }, 3000);
 
-        const finalizeMerge = () => {
+        const finalizeMerge = async () => {
           if (mapLoaded) return;
           mapLoaded = true;
           clearTimeout(mapTimeout);
@@ -1082,19 +1087,24 @@ export default function App() {
           ctx.restore();
 
           // Text Content
+          await document.fonts.ready;
           const textX = mapX + mapSize + padding;
+          const textRight = bgX + bgWidth - padding;
           let textY = mapY + (canvas.width * 0.04);
+
+          ctx.direction = 'rtl';
+          ctx.textAlign = 'right';
 
           ctx.fillStyle = 'white';
           const titleSize = Math.max(16, canvas.width * 0.032);
-          ctx.font = `bold ${titleSize}px sans-serif`;
+          ctx.font = `bold ${titleSize}px 'Cairo', sans-serif`;
 
           const locationTitle = `${loc.city || 'Dammam'}, ${loc.country || 'Saudi Arabia'}`;
-          ctx.fillText(locationTitle, textX, textY);
+          ctx.fillText(locationTitle, textRight, textY);
 
           textY += titleSize + 8;
           const bodySize = Math.max(11, canvas.width * 0.02);
-          ctx.font = `${bodySize}px sans-serif`;
+          ctx.font = `${bodySize}px 'Cairo', sans-serif`;
           const maxWidth = bgWidth - (textX - bgX) - padding;
           const words = (loc.address || "").split(' ');
           let line = '';
@@ -1103,23 +1113,23 @@ export default function App() {
           for (let n = 0; n < words.length; n++) {
             const testLine = line + words[n] + ' ';
             if (ctx.measureText(testLine).width > maxWidth && n > 0) {
-              ctx.fillText(line, textX, textY);
+              ctx.fillText(line, textRight, textY);
               line = words[n] + ' ';
               textY += lineHeight;
             } else {
               line = testLine;
             }
           }
-          ctx.fillText(line, textX, textY);
+          ctx.fillText(line, textRight, textY);
 
           textY += lineHeight + 6;
-          ctx.font = `500 ${bodySize}px sans-serif`;
-          ctx.fillText(`Lat ${loc.latitude.toFixed(6)}° Long ${loc.longitude.toFixed(6)}°`, textX, textY);
+          ctx.font = `500 ${bodySize}px 'Cairo', sans-serif`;
+          ctx.fillText(`Lat ${loc.latitude.toFixed(6)}° Long ${loc.longitude.toFixed(6)}°`, textRight, textY);
 
           textY += lineHeight + 4;
-          ctx.font = `${bodySize - 1}px sans-serif`;
+          ctx.font = `${bodySize - 1}px 'Cairo', sans-serif`;
           ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
-          ctx.fillText(loc.timestamp, textX, textY);
+          ctx.fillText(loc.timestamp, textRight, textY);
 
           resolve(canvas.toDataURL('image/jpeg', 0.7));
         };
