@@ -25,6 +25,8 @@ interface LocationData {
 interface FolderItem {
   id: string;
   name: string;
+  city?: string;
+  address?: string;
   ownerId: string;
   createdAt: any;
 }
@@ -102,6 +104,8 @@ export default function App() {
   const [isRenamingFolder, setIsRenamingFolder] = useState(false);
   const [renamingFolder, setRenamingFolder] = useState<FolderItem | null>(null);
   const [renameFolderName, setRenameFolderName] = useState('');
+  const [renameFolderCity, setRenameFolderCity] = useState('');
+  const [renameFolderAddress, setRenameFolderAddress] = useState('');
 
   // Move Photos State
   const [isMovingPhotos, setIsMovingPhotos] = useState(false);
@@ -830,12 +834,16 @@ export default function App() {
         ctx.direction = 'rtl';
         ctx.textAlign = 'right';
 
+        // Folder-registered city/address override GPS-derived values when set
+        const stampCity = selectedFolder?.city?.trim() || location.city;
+        const stampAddress = selectedFolder?.address?.trim() || location.address;
+
         // Title: City, Province
         ctx.fillStyle = 'white';
         const titleSize = Math.max(16, canvas.width * 0.032);
         ctx.font = `bold ${titleSize}px 'Cairo', sans-serif`;
 
-        const locationTitle = `${location.city || 'Dammam'}, ${location.country || 'Saudi Arabia'}`;
+        const locationTitle = `${stampCity || 'Dammam'}, ${location.country || 'Saudi Arabia'}`;
         ctx.fillText(locationTitle, textRight, textY);
 
         // Address (wrapped)
@@ -843,7 +851,7 @@ export default function App() {
         const bodySize = Math.max(11, canvas.width * 0.02);
         ctx.font = `${bodySize}px 'Cairo', sans-serif`;
         const maxWidth = bgWidth - (textX - bgX) - padding;
-        const words = (location.address || "").split(' ');
+        const words = (stampAddress || "").split(' ');
         let line = '';
         const lineHeight = bodySize + 4;
 
@@ -922,7 +930,7 @@ export default function App() {
         imageUrl: img,
         latitude: location.latitude,
         longitude: location.longitude,
-        address: location.address || "",
+        address: selectedFolder.address?.trim() || location.address || "",
         timestamp: location.timestamp,
         ownerId: user.uid
       };
@@ -1095,18 +1103,22 @@ export default function App() {
           ctx.direction = 'rtl';
           ctx.textAlign = 'right';
 
+          // Folder-registered city/address override GPS-derived values when set
+          const stampCity = selectedFolder?.city?.trim() || loc.city;
+          const stampAddress = selectedFolder?.address?.trim() || loc.address;
+
           ctx.fillStyle = 'white';
           const titleSize = Math.max(16, canvas.width * 0.032);
           ctx.font = `bold ${titleSize}px 'Cairo', sans-serif`;
 
-          const locationTitle = `${loc.city || 'Dammam'}, ${loc.country || 'Saudi Arabia'}`;
+          const locationTitle = `${stampCity || 'Dammam'}, ${loc.country || 'Saudi Arabia'}`;
           ctx.fillText(locationTitle, textRight, textY);
 
           textY += titleSize + 8;
           const bodySize = Math.max(11, canvas.width * 0.02);
           ctx.font = `${bodySize}px 'Cairo', sans-serif`;
           const maxWidth = bgWidth - (textX - bgX) - padding;
-          const words = (loc.address || "").split(' ');
+          const words = (stampAddress || "").split(' ');
           let line = '';
           const lineHeight = bodySize + 4;
 
@@ -1254,6 +1266,8 @@ export default function App() {
   const handleOpenRenameFolder = (folder: FolderItem) => {
     setRenamingFolder(folder);
     setRenameFolderName(folder.name);
+    setRenameFolderCity(folder.city || '');
+    setRenameFolderAddress(folder.address || '');
     setIsRenamingFolder(true);
   };
 
@@ -1261,38 +1275,41 @@ export default function App() {
     if (!user || !renamingFolder || !renameFolderName.trim()) return;
     try {
       const updatedName = renameFolderName.trim();
+      const updatedCity = renameFolderCity.trim();
+      const updatedAddress = renameFolderAddress.trim();
+      const updates = { name: updatedName, city: updatedCity, address: updatedAddress };
 
       if (user.uid === 'guest_user') {
         const storedFolders = localStorage.getItem('guest_folders');
         const allFolders = storedFolders ? JSON.parse(storedFolders) : [];
-        const updatedFolders = allFolders.map((f: FolderItem) => 
-          f.id === renamingFolder.id ? { ...f, name: updatedName } : f
+        const updatedFolders = allFolders.map((f: FolderItem) =>
+          f.id === renamingFolder.id ? { ...f, ...updates } : f
         );
         localStorage.setItem('guest_folders', JSON.stringify(updatedFolders));
         setFolders(updatedFolders);
-        
+
         if (selectedFolder?.id === renamingFolder.id) {
-          setSelectedFolder({ ...selectedFolder, name: updatedName });
+          setSelectedFolder({ ...selectedFolder, ...updates });
         }
-        
+
         setIsRenamingFolder(false);
         setRenamingFolder(null);
         setRenameFolderName('');
-        setSuccessMessage("تم تعديل اسم المجلد بنجاح ✨");
+        setSuccessMessage("تم تعديل بيانات المجلد بنجاح ✨");
         setTimeout(() => setSuccessMessage(null), 3000);
         return;
       }
 
-      await setDoc(doc(db, 'folders', renamingFolder.id), { name: updatedName }, { merge: true });
+      await setDoc(doc(db, 'folders', renamingFolder.id), updates, { merge: true });
 
       if (selectedFolder?.id === renamingFolder.id) {
-        setSelectedFolder({ ...selectedFolder, name: updatedName });
+        setSelectedFolder({ ...selectedFolder, ...updates });
       }
 
       setIsRenamingFolder(false);
       setRenamingFolder(null);
       setRenameFolderName('');
-      setSuccessMessage("تم تعديل اسم المجلد بنجاح ✨");
+      setSuccessMessage("تم تعديل بيانات المجلد بنجاح ✨");
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {
       handleFirestoreError(err, OperationType.UPDATE, 'folders');
@@ -2994,15 +3011,17 @@ export default function App() {
                   <div>
                     <h3 className="text-xl font-bold flex items-center gap-2">
                       <Folder className="w-5 h-5 text-blue-400" />
-                      تعديل اسم المجلد
+                      تعديل بيانات المجلد
                     </h3>
-                    <p className="text-xs text-zinc-500 mt-1">قم بتعديل الاسم الحالي للمجلد.</p>
+                    <p className="text-xs text-zinc-500 mt-1">لو سجّلت مدينة وعنوان هنا، هيتحطوا تلقائياً على كل صورة تلتقطها أو تدمجها من المجلد ده بدل الاعتماد على تحديد الموقع.</p>
                   </div>
-                  <button 
+                  <button
                     onClick={() => {
                       setIsRenamingFolder(false);
                       setRenamingFolder(null);
                       setRenameFolderName('');
+                      setRenameFolderCity('');
+                      setRenameFolderAddress('');
                     }}
                     className="p-1.5 bg-zinc-800 hover:bg-zinc-750 rounded-full transition-colors text-zinc-400 hover:text-white cursor-pointer"
                   >
@@ -3011,8 +3030,8 @@ export default function App() {
                 </div>
 
                 <div className="flex flex-col gap-2 mt-2">
-                  <label className="text-xs font-bold text-zinc-400">الاسم الجديد</label>
-                  <input 
+                  <label className="text-xs font-bold text-zinc-400">اسم المجلد</label>
+                  <input
                     type="text"
                     placeholder="أدخل الاسم الجديد للمجلد..."
                     value={renameFolderName}
@@ -3023,20 +3042,51 @@ export default function App() {
                   />
                 </div>
 
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-bold text-zinc-400">المدينة (اختياري)</label>
+                  <input
+                    type="text"
+                    placeholder="مثال: الظهران"
+                    value={renameFolderCity}
+                    onChange={e => setRenameFolderCity(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && renameFolder()}
+                    className="w-full bg-zinc-800 border-none rounded-2xl p-4 text-sm placeholder-zinc-600 text-white focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-bold text-zinc-400">العنوان (اختياري)</label>
+                  <input
+                    type="text"
+                    placeholder="مثال: الحي الصناعي، طريق الملك فهد"
+                    value={renameFolderAddress}
+                    onChange={e => setRenameFolderAddress(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && renameFolder()}
+                    className="w-full bg-zinc-800 border-none rounded-2xl p-4 text-sm placeholder-zinc-600 text-white focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+
                 <div className="flex gap-3 pt-2">
-                  <button 
+                  <button
                     onClick={() => {
                       setIsRenamingFolder(false);
                       setRenamingFolder(null);
                       setRenameFolderName('');
-                    }} 
+                      setRenameFolderCity('');
+                      setRenameFolderAddress('');
+                    }}
                     className="flex-1 py-3.5 bg-zinc-800 hover:bg-zinc-750 rounded-xl text-zinc-400 font-bold text-sm transition-colors cursor-pointer border border-white/5"
                   >
                     إلغاء
                   </button>
                   <button
                     onClick={renameFolder}
-                    disabled={!renameFolderName.trim() || renameFolderName.trim() === renamingFolder?.name}
+                    disabled={
+                      !renameFolderName.trim() ||
+                      (renameFolderName.trim() === (renamingFolder?.name || '') &&
+                        renameFolderCity.trim() === (renamingFolder?.city || '') &&
+                        renameFolderAddress.trim() === (renamingFolder?.address || ''))
+                    }
                     className="flex-1 bg-blue-600 hover:bg-blue-500 rounded-xl py-3.5 font-bold text-sm text-white shadow-lg shadow-blue-600/20 active:scale-[0.98] transition-all cursor-pointer disabled:opacity-50"
                   >
                     تطبيق التعديل
