@@ -1321,6 +1321,8 @@ export default function App() {
         setIsRenamingFolder(false);
         setRenamingFolder(null);
         setRenameFolderName('');
+        setRenameFolderCity('');
+        setRenameFolderAddress('');
         setSuccessMessage("تم تعديل بيانات المجلد بنجاح ✨");
         setTimeout(() => setSuccessMessage(null), 3000);
         return;
@@ -1335,6 +1337,8 @@ export default function App() {
       setIsRenamingFolder(false);
       setRenamingFolder(null);
       setRenameFolderName('');
+      setRenameFolderCity('');
+      setRenameFolderAddress('');
       setSuccessMessage("تم تعديل بيانات المجلد بنجاح ✨");
       setTimeout(() => setSuccessMessage(null), 3000);
     } catch (err) {

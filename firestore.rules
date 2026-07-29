@@ -13,6 +13,8 @@ service cloud.firestore {
     //   - ownerId: string (required, matches auth.uid)
     //   - createdAt: timestamp (required)
     //   - coverImage: string (optional, base64 thumbnail < 300KB)
+    //   - city: string (optional, registered city stamped onto photos from this folder)
+    //   - address: string (optional, registered address stamped onto photos from this folder)
     //
     // Collection: photos
     // Document ID: auto-generated
@@ -64,11 +66,13 @@ service cloud.firestore {
 
     function isValidFolder(data) {
       return hasRequiredFields(['name', 'ownerId', 'createdAt']) &&
-             hasOnlyAllowedFields(['name', 'ownerId', 'createdAt', 'coverImage']) &&
+             hasOnlyAllowedFields(['name', 'ownerId', 'createdAt', 'coverImage', 'city', 'address']) &&
              data.name is string && data.name.size() > 0 && data.name.size() <= 50 &&
              data.ownerId == request.auth.uid &&
              data.createdAt is timestamp &&
-             (!('coverImage' in data) || (data.coverImage is string && data.coverImage.size() < 300000));
+             (!('coverImage' in data) || (data.coverImage is string && data.coverImage.size() < 300000)) &&
+             (!('city' in data) || (data.city is string && data.city.size() <= 100)) &&
+             (!('address' in data) || (data.address is string && data.address.size() <= 300));
     }
 
     function isValidPhoto(data) {
