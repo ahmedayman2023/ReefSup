@@ -82,24 +82,21 @@ const getPhotoCountLabel = (count: number): string => {
   return `${count} صورة`;
 };
 
-// Cleans a Nominatim result's display_name: drops the separate city/town segment
-// (already shown in the title above) and strips the "محافظة" prefix from the
-// governorate segment, keeping the leading place/road name and everything else as-is.
+// Builds the detailed address from Nominatim's structured fields directly (not display_name,
+// which repeats the city and never strips "محافظة"): neighbourhood/road, then the governorate
+// with "محافظة" stripped, then state, postcode, country. The city itself is dropped since it's
+// already shown in the title above.
 const buildAdministrativeAddress = (data: any): string => {
   const addr = data?.address || {};
-  const displayName: string = data?.display_name || '';
-  const segments = displayName.split(',').map((s: string) => s.trim()).filter(Boolean);
-  if (segments.length === 0) return displayName;
-
-  const cityValue = (addr.city || addr.town || addr.village || addr.suburb || '').trim();
-  const countyValue = (addr.county || '').trim();
-  const countyStripped = countyValue.replace(/^محافظة\s+/, '').trim();
-
-  const cleaned = segments
-    .filter(seg => !(cityValue && seg === cityValue))
-    .map(seg => (countyValue && seg === countyValue) ? countyStripped : seg);
-
-  return cleaned.length > 0 ? cleaned.join(', ') : displayName;
+  const muhafazah = (addr.county || addr.province || '').replace(/^محافظة\s+/, '').trim();
+  const parts = [
+    addr.neighbourhood || addr.suburb || addr.quarter || addr.road || addr.amenity || addr.shop,
+    muhafazah,
+    addr.state,
+    addr.postcode,
+    addr.country,
+  ].filter(Boolean);
+  return parts.length > 0 ? parts.join(', ') : (data?.display_name || '');
 };
 
 export default function App() {
