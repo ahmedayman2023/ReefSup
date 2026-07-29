@@ -82,13 +82,22 @@ const getPhotoCountLabel = (count: number): string => {
   return `${count} صورة`;
 };
 
+const stripMuhafazahPrefix = (value: string): string => value.replace(/^محافظة\s+/, '').trim();
+
+// The main city label used in the title: prefers the governorate (محافظة) name, stripped of
+// the word "محافظة", over Nominatim's narrower city/town/village/suburb field.
+const extractCityLabel = (addr: any): string => {
+  const muhafazah = stripMuhafazahPrefix(addr?.county || addr?.province || '');
+  return muhafazah || addr?.city || addr?.town || addr?.village || addr?.suburb || addr?.state || addr?.country || '';
+};
+
 // Builds the detailed address from Nominatim's structured fields directly (not display_name,
 // which repeats the city and never strips "محافظة"): neighbourhood/road, then the governorate
 // with "محافظة" stripped, then state, postcode, country. The city itself is dropped since it's
 // already shown in the title above.
 const buildAdministrativeAddress = (data: any): string => {
   const addr = data?.address || {};
-  const muhafazah = (addr.county || addr.province || '').replace(/^محافظة\s+/, '').trim();
+  const muhafazah = stripMuhafazahPrefix(addr.county || addr.province || '');
   const parts = [
     addr.neighbourhood || addr.suburb || addr.quarter || addr.road || addr.amenity || addr.shop,
     muhafazah,
@@ -393,7 +402,7 @@ export default function App() {
         setLocation({
           latitude, longitude, timestamp, rawTimestamp,
           address: buildAdministrativeAddress(data),
-          city: data.address.city || data.address.town || data.address.village || "",
+          city: extractCityLabel(data.address),
           country: data.address.country || ""
         });
       } catch {
@@ -521,7 +530,7 @@ export default function App() {
       const data = await response.json();
       if (data) {
         const addr = data.address;
-        city = addr.city || addr.town || addr.village || addr.suburb || addr.state || addr.country || "";
+        city = extractCityLabel(addr);
         country = addr.country || "";
         address = buildAdministrativeAddress(data);
         setEditCity(city);
@@ -580,7 +589,7 @@ export default function App() {
         longitude: coords.lon,
         timestamp, rawTimestamp,
         address: buildAdministrativeAddress(data),
-        city: addr.city || addr.town || addr.village || addr.suburb || addr.state || "",
+        city: extractCityLabel(addr),
         country: addr.country || ""
       });
     } catch (err) {
@@ -618,7 +627,7 @@ export default function App() {
     syncMapPosition(lat, lon);
     
     const addr = item.address || {};
-    const city = addr.city || addr.town || addr.village || addr.suburb || addr.state || addr.country || "";
+    const city = extractCityLabel(addr);
     setEditCity(city);
     setEditCountry(addr.country || "");
     setEditAddress(buildAdministrativeAddress(item));
@@ -636,7 +645,7 @@ export default function App() {
       const data = await response.json();
       if (data) {
         const addr = data.address;
-        const city = addr.city || addr.town || addr.village || addr.suburb || addr.state || addr.country || "";
+        const city = extractCityLabel(addr);
         setEditCity(city);
         setEditCountry(addr.country || "");
         setEditAddress(buildAdministrativeAddress(data));
