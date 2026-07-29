@@ -82,6 +82,26 @@ const getPhotoCountLabel = (count: number): string => {
   return `${count} صورة`;
 };
 
+// Cleans a Nominatim result's display_name: drops the separate city/town segment
+// (already shown in the title above) and strips the "محافظة" prefix from the
+// governorate segment, keeping the leading place/road name and everything else as-is.
+const buildAdministrativeAddress = (data: any): string => {
+  const addr = data?.address || {};
+  const displayName: string = data?.display_name || '';
+  const segments = displayName.split(',').map((s: string) => s.trim()).filter(Boolean);
+  if (segments.length === 0) return displayName;
+
+  const cityValue = (addr.city || addr.town || addr.village || addr.suburb || '').trim();
+  const countyValue = (addr.county || '').trim();
+  const countyStripped = countyValue.replace(/^محافظة\s+/, '').trim();
+
+  const cleaned = segments
+    .filter(seg => !(cityValue && seg === cityValue))
+    .map(seg => (countyValue && seg === countyValue) ? countyStripped : seg);
+
+  return cleaned.length > 0 ? cleaned.join(', ') : displayName;
+};
+
 export default function App() {
   // Auth State
   const [user, setUser] = useState<User | null>(null);
@@ -375,7 +395,7 @@ export default function App() {
         const data = await response.json();
         setLocation({
           latitude, longitude, timestamp, rawTimestamp,
-          address: data.display_name,
+          address: buildAdministrativeAddress(data),
           city: data.address.city || data.address.town || data.address.village || "",
           country: data.address.country || ""
         });
@@ -506,7 +526,7 @@ export default function App() {
         const addr = data.address;
         city = addr.city || addr.town || addr.village || addr.suburb || addr.state || addr.country || "";
         country = addr.country || "";
-        address = data.display_name || "";
+        address = buildAdministrativeAddress(data);
         setEditCity(city);
         setEditCountry(country);
         setEditAddress(address);
@@ -562,7 +582,7 @@ export default function App() {
         latitude: coords.lat,
         longitude: coords.lon,
         timestamp, rawTimestamp,
-        address: data?.display_name || "",
+        address: buildAdministrativeAddress(data),
         city: addr.city || addr.town || addr.village || addr.suburb || addr.state || "",
         country: addr.country || ""
       });
@@ -604,7 +624,7 @@ export default function App() {
     const city = addr.city || addr.town || addr.village || addr.suburb || addr.state || addr.country || "";
     setEditCity(city);
     setEditCountry(addr.country || "");
-    setEditAddress(item.display_name || "");
+    setEditAddress(buildAdministrativeAddress(item));
     setSearchLocationResults([]);
     setSearchLocationQuery('');
   }, [syncMapPosition]);
@@ -622,7 +642,7 @@ export default function App() {
         const city = addr.city || addr.town || addr.village || addr.suburb || addr.state || addr.country || "";
         setEditCity(city);
         setEditCountry(addr.country || "");
-        setEditAddress(data.display_name || "");
+        setEditAddress(buildAdministrativeAddress(data));
       }
     } catch (err) {
       console.error("Failed to reverse geocode", err);
